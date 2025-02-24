@@ -50,92 +50,136 @@ export default defineComponent({
       }
     };
 
-    // 添加拖拽处理方法
-    const setupDragging = (viewer: any, entity: any) => {
-      const dragHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-      let isDragging = false;
+    // 添加拖拽状态管理
+    interface DragState {
+      isDragging: boolean;
+      lastPosition: Cesium.Cartesian3 | null;
+      startScreenPosition: Cesium.Cartesian2 | null;
+    }
 
-      // 鼠标悬停效果
-      dragHandler.setInputAction((e: any) => {
-        const pickedObject = viewer.scene.pick(e.endPosition);
-        if (Cesium.defined(pickedObject) && pickedObject.id === entity) {
-          document.body.style.cursor = 'move';
-          entity.billboard.scale = entity.billboard.scale.getValue() * 1.1;
-        } else {
-          document.body.style.cursor = 'default';
-          if (!isDragging) {
-            entity.billboard.scale = entity.billboard.scale.getValue() / 1.1;
-          }
+    const setupDragging = (viewer: any, entity: any) => {
+      const dragState: DragState = {
+        isDragging: false,
+        lastPosition: null,
+        startScreenPosition: null
+      };
+
+      const dragHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+      // 鼠标悬停效果优化
+      dragHandler.setInputAction((movement: any) => {
+        const pickedObject = viewer.scene.pick(movement.endPosition);
+        const isHovering = Cesium.defined(pickedObject) && pickedObject.id === entity;
+        
+        document.body.style.cursor = isHovering ? 'grab' : 'default';
+        
+        if (isHovering && !dragState.isDragging) {
+          entity.billboard.scale = 0.6;
+          entity.billboard.color = Cesium.Color.WHITE.withAlpha(1.0);
+        } else if (!dragState.isDragging) {
+          entity.billboard.scale = 0.5;
+          entity.billboard.color = Cesium.Color.WHITE.withAlpha(0.9);
         }
       }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
-      // 开始拖拽
-      dragHandler.setInputAction((e: any) => {
-        const pickedObject = viewer.scene.pick(e.position);
+      // 开始拖拽优化
+      dragHandler.setInputAction((movement: any) => {
+        const pickedObject = viewer.scene.pick(movement.position);
         if (Cesium.defined(pickedObject) && pickedObject.id === entity) {
-          isDragging = true;
+          dragState.isDragging = true;
+          dragState.startScreenPosition = movement.position;
+          dragState.lastPosition = entity.position.getValue(viewer.clock.currentTime);
+          
+          document.body.style.cursor = 'grabbing';
           viewer.scene.screenSpaceCameraController.enableRotate = false;
-          entity.billboard.scale = entity.billboard.scale.getValue() * 1.2;
+          
+          // 拖拽开始效果
+          entity.billboard.scale = 0.7;
+          entity.billboard.color = Cesium.Color.YELLOW.withAlpha(1.0);
         }
       }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
 
-      // 拖拽移动
-      dragHandler.setInputAction((e: any) => {
-        if (isDragging) {
-          const cartesian = viewer.scene.camera.pickEllipsoid(
-            e.endPosition,
-            viewer.scene.globe.ellipsoid
-          );
+      // 拖拽移动优化
+      dragHandler.setInputAction((movement: any) => {
+        if (dragState.isDragging) {
+          const scene = viewer.scene;
+          const ray = scene.camera.getPickRay(movement.endPosition);
+          const cartesian = scene.globe.pick(ray, scene);
+
           if (cartesian) {
-            entity.position = cartesian;
-            
-            // 获取新坐标并发送更新事件
+            // 限制拖拽边界
             const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
-            const newLongitude = Cesium.Math.toDegrees(cartographic.longitude);
-            const newLatitude = Cesium.Math.toDegrees(cartographic.latitude);
+            const longitude = Cesium.Math.toDegrees(cartographic.longitude);
+            const latitude = Cesium.Math.toDegrees(cartographic.latitude);
             
-            window.dispatchEvent(new CustomEvent('updateCoordinates', {
-              detail: { longitude: newLongitude, latitude: newLatitude }
-            }));
+            // 设置拖拽边界限制
+            if (longitude >= -180 && longitude <= 180 && latitude >= -85 && latitude <= 85) {
+              entity.position = cartesian;
+              
+              // 发送坐标更新事件
+              window.dispatchEvent(new CustomEvent('updateCoordinates', {
+                detail: { longitude, latitude }
+              }));
+
+              // 平滑过渡效果
+              entity.billboard.scale = 0.7;
+            }
           }
         }
       }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
-      // 结束拖拽
+      // 结束拖拽优化
       dragHandler.setInputAction(() => {
-        if (isDragging) {
-          isDragging = false;
+        if (dragState.isDragging) {
+          dragState.isDragging = false;
+          dragState.lastPosition = null;
+          dragState.startScreenPosition = null;
+          
           viewer.scene.screenSpaceCameraController.enableRotate = true;
-          entity.billboard.scale = entity.billboard.scale.getValue() / 1.2;
-          document.body.style.cursor = 'default';
+          document.body.style.cursor = 'grab';
+          
+          // 拖拽结束动画效果
+          entity.billboard.scale = 0.6;
+          entity.billboard.color = Cesium.Color.WHITE.withAlpha(1.0);
+          
+          setTimeout(() => {
+            if (!dragState.isDragging) {
+              entity.billboard.scale = 0.5;
+              entity.billboard.color = Cesium.Color.WHITE.withAlpha(0.9);
+            }
+          }, 200);
         }
       }, Cesium.ScreenSpaceEventType.LEFT_UP);
 
-      // 双击定位
-      dragHandler.setInputAction((e: any) => {
-        const pickedObject = viewer.scene.pick(e.position);
+      // 双击定位优化
+      dragHandler.setInputAction((movement: any) => {
+        const pickedObject = viewer.scene.pick(movement.position);
         if (Cesium.defined(pickedObject) && pickedObject.id === entity) {
-          const cartesian = entity.position.getValue(viewer.clock.currentTime);
-          const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+          const position = entity.position.getValue(viewer.clock.currentTime);
+          const cartographic = Cesium.Cartographic.fromCartesian(position);
           
+          // 优化相机飞行动画
           viewer.camera.flyTo({
             destination: Cesium.Cartesian3.fromRadians(
               cartographic.longitude,
               cartographic.latitude,
-              cartographic.height + 1000
+              cartographic.height + 2000
             ),
             orientation: {
-              heading: 0.0,
-              pitch: Cesium.Math.toRadians(-45),
-              roll: 0.0
+              heading: Cesium.Math.toRadians(0),
+              pitch: Cesium.Math.toRadians(-50),
+              roll: 0
             },
             duration: 1.5,
             complete: () => {
-              // 完成飞行后的回调
-              entity.billboard.scale = entity.billboard.scale.getValue() * 1.2;
+              // 飞行完成后的视觉反馈
+              entity.billboard.scale = 0.7;
+              entity.billboard.color = Cesium.Color.YELLOW.withAlpha(1.0);
+              
               setTimeout(() => {
-                entity.billboard.scale = entity.billboard.scale.getValue() / 1.2;
-              }, 200);
+                entity.billboard.scale = 0.5;
+                entity.billboard.color = Cesium.Color.WHITE.withAlpha(0.9);
+              }, 300);
             }
           });
         }
