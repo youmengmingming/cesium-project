@@ -18,6 +18,16 @@ export default defineComponent({
   setup() {
     const mapRef = ref<HTMLDivElement | null>(null);
 
+    const initSceneEvents = (viewer: Viewer) => {
+      viewer.scene.postRender.addEventListener(() => {
+        const position = viewer.camera.positionCartographic;
+        if (position) {
+          // 确保场景状态更新
+          viewer.scene.requestRender();
+        }
+      });
+    };
+
     onMounted(() => {
       if (mapRef.value) {
         const viewer = new Viewer(mapRef.value, {
@@ -27,7 +37,7 @@ export default defineComponent({
           fullscreenButton: false,
           geocoder: false,
           homeButton: false,
-          sceneModePicker: false,
+          sceneModePicker: false, // 修改为 false
           navigationHelpButton: false,
           baseLayerPicker: false,
           infoBox: false,
@@ -42,6 +52,7 @@ export default defineComponent({
         });
         // 将 viewer 实例设置为全局可访问
         (window as any).cesiumViewer = viewer;
+        initSceneEvents(viewer);
       }
     });
 

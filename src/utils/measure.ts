@@ -7,9 +7,11 @@ export class MeasureTool {
   private tempPosition: Cesium.Cartesian3 | undefined;
   private labels: Cesium.Entity[] = [];
   private viewer: any;
+  private onComplete: (() => void) | null = null;
 
-  constructor(viewer: any) {
+  constructor(viewer: any, onComplete?: () => void) {
     this.viewer = viewer;
+    this.onComplete = onComplete || null;
   }
 
   private calculateAzimuth(start: Cesium.Cartesian3, end: Cesium.Cartesian3): number {
@@ -115,6 +117,10 @@ export class MeasureTool {
       const dialog = confirm(`总距离: ${kilometers} 公里\n点击确定关闭测量`);
       if (dialog) {
         this.clear();
+        // 测量完成时调用回调
+        if (this.onComplete) {
+          this.onComplete();
+        }
       }
     }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
   }

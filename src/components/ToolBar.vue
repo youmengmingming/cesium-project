@@ -30,7 +30,13 @@ export default defineComponent({
     const toggleMeasure = () => {
       measuring.value = !measuring.value;
       if (measuring.value) {
-        measureTool = new MeasureTool((window as any).cesiumViewer);
+        measureTool = new MeasureTool(
+          (window as any).cesiumViewer,
+          () => {
+            measuring.value = false;
+            measureTool = null;
+          }
+        );
         measureTool.start();
       } else if (measureTool) {
         measureTool.clear();
