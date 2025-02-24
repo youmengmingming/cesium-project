@@ -5,12 +5,17 @@
         <img src="../assets/logo.png" alt="Logo">
       </div>
       <div class="buttons">
-        <button v-for="i in 4" :key="i" class="menu-button">
-          测试{{ i }}
+        <button @click="handleTest1Click" class="menu-button">测试1</button>
+        <button v-for="i in 3" :key="i+1" class="menu-button">
+          测试{{ i+1 }}
         </button>
       </div>
     </div>
     <div class="right-section">
+      <div class="coordinates" v-if="currentCoords">
+        经度: {{ currentCoords.longitude.toFixed(6) }}
+        纬度: {{ currentCoords.latitude.toFixed(6) }}
+      </div>
       <div class="time">
         <div class="date">{{ currentDate }}</div>
         <div class="time-text">{{ currentTime }}</div>
@@ -22,12 +27,18 @@
 <script lang="ts">
 import { defineComponent, ref, onMounted, onUnmounted } from 'vue'
 
+interface Coordinates {
+  longitude: number;
+  latitude: number;
+}
+
 export default defineComponent({
   name: 'MenuBar',
   setup() {
     const currentTime = ref('')
     const currentDate = ref('')
     let timer: number
+    const currentCoords = ref<Coordinates | null>(null)
 
     const updateTime = () => {
       const now = new Date()
@@ -48,15 +59,59 @@ export default defineComponent({
     onMounted(() => {
       updateTime()
       timer = setInterval(updateTime, 1000)
+
+      // 添加坐标更新事件监听
+      window.addEventListener('updateCoordinates', ((event: CustomEvent) => {
+        const { longitude, latitude } = event.detail;
+        updateCoordinates(longitude, latitude);
+      }) as EventListener);
     })
 
     onUnmounted(() => {
       clearInterval(timer)
+      // 移除事件监听
+      window.removeEventListener('updateCoordinates', ((event: CustomEvent) => {
+        const { longitude, latitude } = event.detail;
+        updateCoordinates(longitude, latitude);
+      }) as EventListener);
     })
+
+    const handleTest1Click = async () => {
+      if (!currentCoords.value) {
+        console.error('No coordinates available');
+        return;
+      }
+
+      try {
+        const response = await fetch('http://127.0.0.1:3000/coordinates', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(currentCoords.value)
+        });
+
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+
+        console.log('Coordinates sent successfully');
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    // 添加更新坐标的方法
+    const updateCoordinates = (longitude: number, latitude: number) => {
+      currentCoords.value = { longitude, latitude };
+    };
 
     return {
       currentTime,
-      currentDate
+      currentDate,
+      handleTest1Click,
+      currentCoords,
+      updateCoordinates
     }
   }
 })
@@ -153,6 +208,7 @@ export default defineComponent({
 .right-section {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
 .time {
@@ -223,5 +279,16 @@ export default defineComponent({
 
 .menu-item:hover {
   background: var(--menu-hover);
+}
+
+.coordinates {
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  margin-right: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 </style>
