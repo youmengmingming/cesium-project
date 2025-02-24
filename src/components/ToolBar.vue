@@ -12,6 +12,7 @@
       <i class="fas fa-home"></i>
       <span>复位</span>
     </div>
+    <MapSourceSelector class="tool-item" />
   </div>
 </template>
 
@@ -19,9 +20,13 @@
 import { defineComponent, ref } from 'vue';
 import * as Cesium from 'cesium';
 import { MeasureTool } from '../utils/measure';
+import MapSourceSelector from './MapSourceSelector.vue';
 
 export default defineComponent({
   name: 'ToolBar',
+  components: {
+    MapSourceSelector
+  },
   setup() {
     const measuring = ref(false);
     const marking = ref(false);
