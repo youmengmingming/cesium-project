@@ -1,4 +1,4 @@
- #pragma once
+#pragma once
 
 #include "http_server.h"
 #include "websocket_server.h"
@@ -44,11 +44,11 @@ private:
     // WebSocket 消息处理器
     void handleWebSocketMessage(
         const std::string& message,
-        const std::shared_ptr<websocket::stream<beast::tcp_stream>>& session);
+        const std::shared_ptr<WebSocketSession>& session);
 
     // WebSocket 连接处理器
     void handleWebSocketConnection(
-        const std::shared_ptr<websocket::stream<beast::tcp_stream>>& session,
+        const std::shared_ptr<WebSocketSession>& session,
         bool connected);
 
     // 模拟数据生成线程

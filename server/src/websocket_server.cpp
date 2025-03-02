@@ -1,4 +1,4 @@
-#include "websocket_server.h"
+#include "../include/websocket_server.h"
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/beast/core.hpp>
@@ -21,16 +21,24 @@ WebSocketSession::WebSocketSession(
     WebSocketConnectionHandler connection_handler)
     : ws_(std::move(socket)),
       message_handler_(std::move(message_handler)),
-      connection_handler_(std::move(connection_handler)) {
+      connection_handler_(std::move(connection_handler)),
+      writing_(false),
+      is_open_(true) {
 }
 
 // WebSocket 会话析构函数
 WebSocketSession::~WebSocketSession() {
+    // 标记会话已关闭
+    is_open_ = false;
+    
     // 通知连接已关闭
     if (connection_handler_) {
-        std::shared_ptr<websocket::stream<beast::tcp_stream>> ws_ptr = 
-            std::shared_ptr<websocket::stream<beast::tcp_stream>>(&ws_, [](auto*){});
-        connection_handler_(ws_ptr, false);
+        try {
+            // 使用尝试，而不是直接使用shared_from_this()，以防在析构过程中已经无法获取shared_ptr
+            connection_handler_(shared_from_this(), false);
+        } catch (const std::exception& e) {
+            std::cerr << "Error in ~WebSocketSession: " << e.what() << std::endl;
+        }
     }
 }
 
@@ -58,9 +66,7 @@ void WebSocketSession::run() {
 
                 // 通知连接已建立
                 if (self->connection_handler_) {
-                    std::shared_ptr<websocket::stream<beast::tcp_stream>> ws_ptr = 
-                        std::shared_ptr<websocket::stream<beast::tcp_stream>>(&self->ws_, [](auto*){});
-                    self->connection_handler_(ws_ptr, true);
+                    self->connection_handler_(self, true);
                 }
 
                 // 开始读取消息
@@ -70,16 +76,75 @@ void WebSocketSession::run() {
 
 // 发送消息
 void WebSocketSession::send(const std::string& message) {
-    // 发送消息到客户端
-    ws_.async_write(
-        net::buffer(message),
-        beast::bind_front_handler(
-            [self = shared_from_this()](beast::error_code ec, std::size_t bytes_transferred) {
-                if (ec) {
-                    std::cerr << "WebSocket write error: " << ec.message() << std::endl;
-                    return;
-                }
-            }));
+    // 使用互斥锁保护队列访问
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        // 检查会话是否已关闭
+        if (!is_open_) {
+            std::cerr << "Trying to send to closed WebSocket session" << std::endl;
+            return;
+        }
+        
+        // 将消息添加到队列
+        write_queue_.push(message);
+        
+        // 如果已经有写操作在进行，直接返回
+        if (writing_) {
+            return;
+        }
+    }
+    
+    // 开始处理写队列
+    doWrite();
+}
+
+// 处理消息队列
+void WebSocketSession::doWrite() {
+    // 设置写入标志
+    writing_ = true;
+    
+    std::string message;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (write_queue_.empty()) {
+            writing_ = false;
+            return;
+        }
+        // 使用std::move来避免不必要的复制，并确保原始字符串被清空
+        message = std::move(write_queue_.front());
+        write_queue_.pop();
+    }
+    
+    // 确保WebSocket连接处于开放状态
+    if (!ws_.is_open()) {
+        std::cerr << "WebSocket is closed, cannot send message" << std::endl;
+        writing_ = false;
+        return;
+    }
+    
+    try {
+        // 创建一个共享指针来存储消息，确保在异步操作期间消息不会被销毁
+        auto msg_ptr = std::make_shared<std::string>(std::move(message));
+        
+        // 发送消息到客户端
+        ws_.async_write(
+            net::buffer(*msg_ptr),
+            beast::bind_front_handler(
+                [self = shared_from_this(), msg_ptr](beast::error_code ec, std::size_t bytes_transferred) {
+                    if (ec) {
+                        std::cerr << "WebSocket write error: " << ec.message() << std::endl;
+                        self->writing_ = false;
+                        return;
+                    }
+                    
+                    // 检查队列中是否还有更多消息
+                    self->doWrite();
+                }));
+    } catch (const std::exception& e) {
+        std::cerr << "Exception in WebSocketSession::doWrite: " << e.what() << std::endl;
+        writing_ = false;
+    }
 }
 
 // 接收消息
@@ -96,11 +161,16 @@ void WebSocketSession::doRead() {
 
                 // 处理消息
                 if (self->message_handler_) {
+                    // 创建消息的副本，避免在回调中使用buffer_的引用
                     std::string message = beast::buffers_to_string(self->buffer_.data());
                     self->buffer_.consume(self->buffer_.size());
-                    std::shared_ptr<websocket::stream<beast::tcp_stream>> ws_ptr = 
-                        std::shared_ptr<websocket::stream<beast::tcp_stream>>(&self->ws_, [](auto*){});
-                    self->message_handler_(message, ws_ptr);
+                    
+                    try {
+                        // 直接传递会话对象自身
+                        self->message_handler_(message, self);
+                    } catch (const std::exception& e) {
+                        std::cerr << "Error in message handler: " << e.what() << std::endl;
+                    }
                 }
 
                 // 继续读取下一条消息
@@ -110,6 +180,9 @@ void WebSocketSession::doRead() {
 
 // 处理关闭
 void WebSocketSession::onClose(beast::error_code ec) {
+    // 标记会话已关闭
+    is_open_ = false;
+    
     if (ec == websocket::error::closed) {
         std::cout << "WebSocket connection closed normally" << std::endl;
     } else {
@@ -118,9 +191,25 @@ void WebSocketSession::onClose(beast::error_code ec) {
 
     // 关闭 WebSocket 连接
     beast::error_code close_ec;
-    ws_.close(websocket::close_code::normal, close_ec);
-    if (close_ec) {
-        std::cerr << "Error closing WebSocket: " << close_ec.message() << std::endl;
+    
+    // 用互斥锁保护关闭操作
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        // 清空消息队列
+        std::queue<std::string> empty;
+        std::swap(write_queue_, empty);
+    }
+    
+    // 只在连接仍然打开时尝试关闭
+    if (ws_.is_open()) {
+        try {
+            ws_.close(websocket::close_code::normal, close_ec);
+            if (close_ec) {
+                std::cerr << "Error closing WebSocket: " << close_ec.message() << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Exception in WebSocketSession::onClose: " << e.what() << std::endl;
+        }
     }
 }
 
@@ -226,9 +315,40 @@ void WebSocketServer::setConnectionHandler(WebSocketConnectionHandler handler) {
 
 // 广播消息给所有客户端
 void WebSocketServer::broadcast(const std::string& message) {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
-    for (auto& session : sessions_) {
-        session->send(message);
+    // 创建消息的副本，确保在多线程环境中安全
+    std::string message_copy = message;
+    
+    // 创建会话集合的快照，在锁内复制指针但在锁外发送消息
+    std::vector<std::shared_ptr<WebSocketSession>> session_snapshot;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        session_snapshot.reserve(sessions_.size());
+        for (const auto& session : sessions_) {
+            session_snapshot.push_back(session);
+        }
+    }
+    
+    // 在锁外发送消息给所有会话
+    for (const auto& session : session_snapshot) {
+        try {
+            // 为每个会话传递消息的副本
+            session->send(message_copy);
+        } catch (const std::exception& e) {
+            std::cerr << "Error broadcasting message: " << e.what() << std::endl;
+        }
+    }
+}
+
+// 向特定会话发送消息
+void WebSocketServer::sendTo(const std::shared_ptr<WebSocketSession>& session, const std::string& message) {
+    if (session) {
+        try {
+            // 创建消息的副本，确保在多线程环境中安全
+            std::string message_copy = message;
+            session->send(message_copy);
+        } catch (const std::exception& e) {
+            std::cerr << "Error sending message to specific session: " << e.what() << std::endl;
+        }
     }
 }
 
@@ -242,22 +362,33 @@ void WebSocketServer::doAccept() {
                     // 创建新的 WebSocket 会话
                     auto session = std::make_shared<WebSocketSession>(
                         std::move(socket),
-                        [this](const std::string& message, const std::shared_ptr<websocket::stream<beast::tcp_stream>>& ws_ptr) {
+                        [this](const std::string& message, const std::shared_ptr<WebSocketSession>& session) {
                             if (message_handler_) {
-                                message_handler_(message, ws_ptr);
+                                try {
+                                    message_handler_(message, session);
+                                } catch (const std::exception& e) {
+                                    std::cerr << "Error in message handler: " << e.what() << std::endl;
+                                }
                             }
                         },
-                        [this](const std::shared_ptr<websocket::stream<beast::tcp_stream>>& ws_ptr, bool connected) {
-                            if (connected) {
-                                // 实现连接处理
-                                std::lock_guard<std::mutex> lock(sessions_mutex_);
-                                // 这里的session会在WebSocketSession构造函数中自动添加到sessions_
-                            } else {
-                                // 断开连接处理已经在WebSocketSession析构函数中处理
-                            }
+                        [this](const std::shared_ptr<WebSocketSession>& session, bool connected) {
+                            try {
+                                if (connected) {
+                                    // 这里不需要做任何事情，会话已经在下方添加到了sessions_集合
+                                } else {
+                                    // 断开连接时从集合中移除会话
+                                    std::lock_guard<std::mutex> lock(sessions_mutex_);
+                                    auto it = sessions_.find(session);
+                                    if (it != sessions_.end()) {
+                                        sessions_.erase(it);
+                                    }
+                                }
 
-                            if (connection_handler_) {
-                                connection_handler_(ws_ptr, connected);
+                                if (connection_handler_) {
+                                    connection_handler_(session, connected);
+                                }
+                            } catch (const std::exception& e) {
+                                std::cerr << "Error in connection handler: " << e.what() << std::endl;
                             }
                         });
 
@@ -268,7 +399,14 @@ void WebSocketServer::doAccept() {
                     }
 
                     // 启动会话
-                    session->run();
+                    try {
+                        session->run();
+                    } catch (const std::exception& e) {
+                        std::cerr << "Error starting WebSocket session: " << e.what() << std::endl;
+                        // 如果启动失败，从集合中移除会话
+                        std::lock_guard<std::mutex> lock(sessions_mutex_);
+                        sessions_.erase(session);
+                    }
                 } else {
                     std::cerr << "Accept error: " << ec.message() << std::endl;
                 }
@@ -280,4 +418,4 @@ void WebSocketServer::doAccept() {
             }));
 }
 
-} // namespace cesium_server
+} // namespace cesium_server 

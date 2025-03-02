@@ -11,6 +11,8 @@
 #include <vector>
 #include <set>
 #include <mutex>
+#include <queue>
+#include <atomic>
 
 namespace cesium_server {
 
@@ -19,14 +21,17 @@ namespace websocket = beast::websocket;
 namespace net = boost::asio;
 using tcp = boost::asio::ip::tcp;
 
+// 前置声明WebSocketSession类
+class WebSocketSession;
+
 // WebSocket 消息处理器类型
 using WebSocketMessageHandler = std::function<void(
     const std::string&, 
-    const std::shared_ptr<websocket::stream<beast::tcp_stream>>&)>;
+    const std::shared_ptr<WebSocketSession>&)>;
 
 // WebSocket 连接处理器类型
 using WebSocketConnectionHandler = std::function<void(
-    const std::shared_ptr<websocket::stream<beast::tcp_stream>>&, 
+    const std::shared_ptr<WebSocketSession>&, 
     bool)>; // true for connect, false for disconnect
 
 // WebSocket 会话类
@@ -42,6 +47,9 @@ public:
 
     // 发送消息
     void send(const std::string& message);
+    
+    // 获取WebSocket流的引用
+    websocket::stream<beast::tcp_stream>& getStream() { return ws_; }
 
 private:
     // 接收消息
@@ -49,6 +57,9 @@ private:
 
     // 处理关闭
     void onClose(beast::error_code ec);
+    
+    // 处理消息队列
+    void doWrite();
 
     // WebSocket 流
     websocket::stream<beast::tcp_stream> ws_;
@@ -61,6 +72,18 @@ private:
 
     // 连接处理器
     WebSocketConnectionHandler connection_handler_;
+    
+    // 互斥锁，保护异步操作
+    std::mutex mutex_;
+    
+    // 消息队列
+    std::queue<std::string> write_queue_;
+    
+    // 指示是否有写操作正在进行
+    std::atomic<bool> writing_{false};
+    
+    // 指示会话是否活跃
+    std::atomic<bool> is_open_{true};
 };
 
 // WebSocket 服务器类
@@ -85,7 +108,7 @@ public:
     void broadcast(const std::string& message);
     
     // 向特定会话发送消息
-    void sendTo(const std::shared_ptr<websocket::stream<beast::tcp_stream>>& session, const std::string& message);
+    void sendTo(const std::shared_ptr<WebSocketSession>& session, const std::string& message);
 
 private:
     // 接受新连接

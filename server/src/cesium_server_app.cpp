@@ -39,13 +39,13 @@ CesiumServerApp::CesiumServerApp(
     
     // 设置 WebSocket 消息处理器
     ws_server_->setMessageHandler(
-        [this](const std::string& message, const std::shared_ptr<websocket::stream<beast::tcp_stream>>& session) {
+        [this](const std::string& message, const std::shared_ptr<WebSocketSession>& session) {
             handleWebSocketMessage(message, session);
         });
     
     // 设置 WebSocket 连接处理器
     ws_server_->setConnectionHandler(
-        [this](const std::shared_ptr<websocket::stream<beast::tcp_stream>>& session, bool connected) {
+        [this](const std::shared_ptr<WebSocketSession>& session, bool connected) {
             handleWebSocketConnection(session, connected);
         });
     
@@ -184,7 +184,11 @@ http::response<http::string_body> CesiumServerApp::handleCoordinatesRequest(
             broadcast_obj["latitude"] = latitude;
             broadcast_obj["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
             
-            ws_server_->broadcast(json::serialize(broadcast_obj));
+            try {
+                ws_server_->broadcast(json::serialize(broadcast_obj));
+            } catch (const std::exception& e) {
+                std::cerr << "Error broadcasting coordinates update: " << e.what() << std::endl;
+            }
             
             // 返回成功响应
             res.body() = json::serialize(json::object{
@@ -231,7 +235,7 @@ http::response<http::string_body> CesiumServerApp::handleCoordinatesRequest(
 // WebSocket 消息处理器
 void CesiumServerApp::handleWebSocketMessage(
     const std::string& message,
-    const std::shared_ptr<websocket::stream<beast::tcp_stream>>& session) {
+    const std::shared_ptr<WebSocketSession>& session) {
     
     try {
         // 解析 JSON
@@ -248,7 +252,11 @@ void CesiumServerApp::handleWebSocketMessage(
             response["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
             
             // 发送响应
-            ws_server_->broadcast(json::serialize(response));
+            try {
+                session->send(json::serialize(response));
+            } catch (const std::exception& e) {
+                std::cerr << "Error sending pong response: " << e.what() << std::endl;
+            }
         } else if (type == "get_coordinates") {
             // 处理获取坐标请求
             std::lock_guard<std::mutex> lock(coordinates_mutex_);
@@ -260,7 +268,11 @@ void CesiumServerApp::handleWebSocketMessage(
             response["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
             
             // 发送响应
-            ws_server_->broadcast(json::serialize(response));
+            try {
+                session->send(json::serialize(response));
+            } catch (const std::exception& e) {
+                std::cerr << "Error sending coordinates response: " << e.what() << std::endl;
+            }
         }
     } catch (const std::exception& e) {
         std::cerr << "Error handling WebSocket message: " << e.what() << std::endl;
@@ -269,7 +281,7 @@ void CesiumServerApp::handleWebSocketMessage(
 
 // WebSocket 连接处理器
 void CesiumServerApp::handleWebSocketConnection(
-    const std::shared_ptr<websocket::stream<beast::tcp_stream>>& session,
+    const std::shared_ptr<WebSocketSession>& session,
     bool connected) {
     
     if (connected) {
@@ -285,7 +297,11 @@ void CesiumServerApp::handleWebSocketConnection(
         welcome["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
         
         // 发送响应
-        ws_server_->broadcast(json::serialize(welcome));
+        try {
+            session->send(json::serialize(welcome));
+        } catch (const std::exception& e) {
+            std::cerr << "Error sending welcome message: " << e.what() << std::endl;
+        }
     } else {
         // 客户端断开连接
         client_count_--;
@@ -305,21 +321,29 @@ void CesiumServerApp::simulationThread() {
     std::uniform_real_distribution<> time_dist(1.0, 5.0);
     
     while (simulation_running_) {
-        // 生成随机坐标
-        double longitude = lon_dist(gen);
-        double latitude = lat_dist(gen);
-        
-        // 创建模拟数据消息
-        json::object sim_data;
-        sim_data["type"] = "simulation_data";
-        sim_data["longitude"] = longitude;
-        sim_data["latitude"] = latitude;
-        sim_data["altitude"] = 1000.0 + 500.0 * std::sin(longitude * 0.1);
-        sim_data["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
-        
-        // 广播给所有客户端
-        if (client_count_.load() > 0) {
-            ws_server_->broadcast(json::serialize(sim_data));
+        try {
+            // 生成随机坐标
+            double longitude = lon_dist(gen);
+            double latitude = lat_dist(gen);
+            
+            // 创建模拟数据消息
+            json::object sim_data;
+            sim_data["type"] = "simulation_data";
+            sim_data["longitude"] = longitude;
+            sim_data["latitude"] = latitude;
+            sim_data["altitude"] = 1000.0 + 500.0 * std::sin(longitude * 0.1);
+            sim_data["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
+            
+            // 广播给所有客户端
+            if (client_count_.load() > 0) {
+                try {
+                    ws_server_->broadcast(json::serialize(sim_data));
+                } catch (const std::exception& e) {
+                    std::cerr << "Error broadcasting simulation data: " << e.what() << std::endl;
+                }
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Error in simulation thread: " << e.what() << std::endl;
         }
         
         // 随机等待时间
