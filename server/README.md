@@ -289,3 +289,21 @@ ws.onerror = (error) => {
 ## 许可证
 
 MIT
+
+### 文件结构
+
+```
+server/
+├── include/                  # 头文件
+│   ├── http_server.h         # HTTP 服务器
+│   ├── websocket_server.h    # WebSocket 服务器
+│   └── cesium_server_app.h   # 应用程序主类
+├── src/                      # 源文件
+│   ├── http_server.cpp       # HTTP 服务器实现
+│   ├── websocket_server.cpp  # WebSocket 服务器实现
+│   ├── cesium_server_app.cpp # 应用程序主类实现
+│   └── main.cpp              # 程序入口
+├── build/                    # 构建目录
+├── CMakeLists.txt            # CMake 构建配置
+└── README.md                 # 使用说明
+```
