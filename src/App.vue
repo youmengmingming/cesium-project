@@ -68,7 +68,8 @@ export default defineComponent({
 }
 
 /* 重置基础样式 */
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   height: 100%;
