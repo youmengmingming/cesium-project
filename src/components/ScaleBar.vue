@@ -34,16 +34,7 @@ export default defineComponent({
 
 <style scoped>
 .scale-bar {
-  background: rgba(28, 32, 38, 0.85);
-  padding: 8px 12px;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: center;
+  background: transparent;
 }
 
 .scale-text {

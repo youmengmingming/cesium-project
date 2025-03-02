@@ -1,28 +1,31 @@
 <template>
   <div class="status-bar">
-    <div class="status-group left">
-      <ScaleBar :scale="scale" />
-    </div>
-    <div class="status-group right">
+    <div class="status-content">
       <div class="status-item">
         <i class="fas fa-crosshairs"></i>
         <div class="status-values">
-          <div class="value-label">经纬度</div>
-          <div class="value-text">{{ mousePosition.longitude.toFixed(6) }}°, {{ mousePosition.latitude.toFixed(6) }}°</div>
+          <ScaleBar :scale="scale" />
+        </div>
+      </div>
+      <div class="status-item">
+        <i class="fas fa-crosshairs"></i>
+        <div class="status-values">
+          <span class="value-label">经纬度:</span>
+          <span class="value-text">{{ mousePosition.longitude.toFixed(6) }}°, {{ mousePosition.latitude.toFixed(6) }}°</span>
         </div>
       </div>
       <div class="status-item">
         <i class="fas fa-mountain"></i>
         <div class="status-values">
-          <div class="value-label">高度</div>
-          <div class="value-text">{{ cameraInfo.height.toFixed(2) }}米</div>
+          <span class="value-label">高度:</span>
+          <span class="value-text">{{ cameraInfo.height.toFixed(2) }}米</span>
         </div>
       </div>
       <div class="status-item">
         <i class="fas fa-angle-up"></i>
         <div class="status-values">
-          <div class="value-label">俯仰角</div>
-          <div class="value-text">{{ cameraInfo.pitch.toFixed(2) }}°</div>
+          <span class="value-label">俯仰角:</span>
+          <span class="value-text">{{ cameraInfo.pitch.toFixed(2) }}°</span>
         </div>
       </div>
     </div>
@@ -183,9 +186,13 @@ export default defineComponent({
           initEventHandlers();
           
           // 添加相机移动结束事件监听
-          viewer.camera.moveEnd.addEventListener(() => {
-            calculateScale(viewer!.camera);
-          });
+          if (viewer) {
+            viewer.camera.moveEnd.addEventListener(() => {
+              if (viewer) {
+                calculateScale(viewer.camera);
+              }
+            });
+          }
         }
       }, 100);
     });
@@ -214,37 +221,37 @@ export default defineComponent({
 <style scoped>
 .status-bar {
   position: fixed;
-  bottom: 25px;
-  left: 25px;
-  right: 25px;
+  bottom: 0;
+  left: 0;
+  right: 0;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  font-family: "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  font-family: inherit;
   z-index: 1000;
+  background-color: transparent;
+  /* border-top: 1px solid var(--border-color); */
+  /* box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.2); */
+  padding: 0;
+  height: 40px;
 }
 
-.status-group {
+.status-content {
   display: flex;
-  gap: 12px;
-}
-
-.status-group.right {
-  background: rgba(28, 32, 38, 0.85);
-  padding: 8px;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  width: 100%;
+  max-width: 1200px;
+  justify-content: space-around;
+  align-items: center;
+  height: 100%;
 }
 
 .status-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
-  border-right: 1px solid rgba(255, 255, 255, 0.15);
-  min-width: 180px;
+  gap: 8px;
+  padding: 0 15px;
+  height: 100%;
+  border-right: 0px solid var(--border-color);
 }
 
 .status-item:last-child {
@@ -253,60 +260,52 @@ export default defineComponent({
 
 .status-item i {
   font-size: 16px;
-  color: #64B5F6;
-  width: 20px;
-  height: 20px;
+  color: var(--primary-color);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all var(--transition-normal);
 }
 
 .status-values {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
 }
 
 .value-label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  color: var(--text-muted);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .value-text {
-  color: white;
-  font-size: 13px;
+  color: var(--text-light);
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.3px;
-}
-
-.status-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
 }
 
 .status-item:hover i {
-  color: #90CAF9;
+  color: var(--accent-color);
   transform: scale(1.1);
 }
 
-.status-item {
-  transition: all 0.2s ease;
-}
-
-.status-item i {
-  transition: all 0.2s ease;
-}
-
 @media (max-width: 768px) {
-  .status-item {
-    min-width: 140px;
+  .status-bar {
+    height: 36px;
   }
   
-  .value-text {
-    font-size: 12px;
+  .status-item {
+    padding: 0 8px;
+    gap: 4px;
+  }
+  
+  .status-item i {
+    font-size: 14px;
+  }
+  
+  .value-label, .value-text {
+    font-size: 11px;
   }
 }
 </style>

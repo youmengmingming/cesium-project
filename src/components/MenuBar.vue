@@ -5,20 +5,20 @@
         <img src="../assets/logo.png" alt="Logo">
       </div>
       <div class="buttons">
-        <button @click="handleTest1Click" class="menu-button">测试1</button>
+        <button @click="handleTest1Click" class="menu-button">
+          <i class="fas fa-chart-line"></i>
+          测试1
+        </button>
         <button v-for="i in 3" :key="i+1" class="menu-button">
+          <i class="fas fa-layer-group"></i>
           测试{{ i+1 }}
         </button>
       </div>
     </div>
     <div class="right-section">
-      <div class="coordinates" v-if="currentCoords">
-        经度: {{ currentCoords.longitude.toFixed(6) }}
-        纬度: {{ currentCoords.latitude.toFixed(6) }}
-      </div>
-      <div class="time">
+      <div class="date-time">
         <div class="date">{{ currentDate }}</div>
-        <div class="time-text">{{ currentTime }}</div>
+        <div class="time">{{ currentTime }}</div>
       </div>
     </div>
   </div>
@@ -37,7 +37,7 @@ export default defineComponent({
   setup() {
     const currentTime = ref('')
     const currentDate = ref('')
-    let timer: number
+    let timer: NodeJS.Timeout
     const currentCoords = ref<Coordinates | null>(null)
 
     const updateTime = () => {
@@ -120,34 +120,31 @@ export default defineComponent({
 <style scoped>
 .menu-bar {
   position: fixed;
-  top: 10px;
-  left: 15px;
-  right: 15px;
-  height: 60px;
-  background: linear-gradient(to right, rgba(28, 32, 38, 0.95), rgba(28, 32, 38, 0.85));
-  backdrop-filter: blur(10px);
+  top: 0px;
+  left: 0px;
+  right: 0px;
+  height: 54px;
+  background: var(--bg-dark);
+  backdrop-filter: blur(12px);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 20px;
   z-index: 1000;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
 }
 
 .left-section {
   display: flex;
   align-items: center;
-  gap: 30px;
+  gap: 32px;
 }
 
 .logo {
-  height: 36px;
-  width: 36px;
+  height: 40px;
+  width: 40px;
   display: flex;
   align-items: center;
-  transition: transform 0.3s ease;
+  transition: transform var(--transition-normal);
 }
 
 .logo:hover {
@@ -167,128 +164,111 @@ export default defineComponent({
 
 .menu-button {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: white;
-  padding: 8px 20px;
-  border-radius: 6px;
-  cursor: pointer;
+  outline: none; 
+  border: none;
+  color: var(--text-light);
+  padding: 8px 16px;
   font-size: 14px;
   font-weight: 500;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-  outline: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.menu-button:before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 0;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.1);
-  transition: width 0.3s ease;
+.menu-button i {
+  font-size: 14px;
+  color: var(--primary-color);
 }
 
 .menu-button:hover {
-  border-color: rgba(255, 255, 255, 0.3);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-hover);
 }
 
-.menu-button:hover:before {
-  width: 100%;
+.menu-button:hover i {
+  color: var(--accent-color);
+
 }
 
 .menu-button:active {
-  transform: translateY(1px);
+
 }
 
 .right-section {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
-.time {
-  color: white;
+.date-time {
+  color: var(--text-light);
   font-size: 14px;
-  font-weight: 500;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  transition: all 0.3s ease;
+  padding: 8px 16px;
+  background: transparent;
+  transition: all var(--transition-normal);
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 140px;
+  align-items: center;
+  gap: 10px;
+}
+
+.date-time i {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--primary-color);
 }
 
 .date {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.8);
+
 }
 
-.time-text {
-  font-size: 15px;
+.time {
+
+}
+
+.coord-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.coord-value {
+  font-size: 14px;
   font-weight: 600;
 }
 
-.time:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.25);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+.time:hover, .date:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.time:hover i, .date:hover i {
+  color: var(--accent-color);
+  transform: scale(1.1);
 }
 
 @media (max-width: 768px) {
   .menu-bar {
-    top: 16px;
-    left: 16px;
-    right: 16px;
+    top: 12px;
+    left: 12px;
+    right: 12px;
     padding: 0 12px;
-    height: 50px;
+    height: 56px;
   }
 
   .menu-button {
-    padding: 6px 14px;
+    padding: 6px 12px;
     font-size: 13px;
   }
 
-  .time {
+  .time, .coordinates {
     font-size: 13px;
     padding: 6px 12px;
   }
 
   .logo {
-    height: 30px;
-    width: 30px;
+    height: 32px;
+    width: 32px;
   }
-}
-
-.menu-container {
-  background: var(--menu-bg);
-  border: 1px solid var(--border-color);
-}
-
-.menu-item {
-  color: var(--text-color);
-}
-
-.menu-item:hover {
-  background: var(--menu-hover);
-}
-
-.coordinates {
-  color: white;
-  font-size: 14px;
-  font-weight: 500;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  margin-right: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 </style>
