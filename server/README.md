@@ -284,6 +284,31 @@ ws.onclose = () => {
 ws.onerror = (error) => {
   console.error('WebSocket error:', error);
 };
+
+// 创建数据库连接
+auto& pool = DatabasePool::getInstance();
+pool.init(DatabaseType::MYSQL, "localhost", 3306, "username", "password", "database_name");
+
+// 创建认证服务
+auto db = pool.acquire();
+AuthService authService(db);
+
+// 用户注册
+if (authService.registerUser("test_user", "password123", "user")) {
+    std::cout << "用户注册成功" << std::endl;
+}
+
+// 用户登录
+auto user = authService.login("test_user", "password123");
+if (user) {
+    std::cout << "登录成功，用户ID: " << user->id << std::endl;
+    // 生成token
+    std::string token = authService.generateToken(*user);
+    // 使用token进行后续操作...
+}
+
+// 释放数据库连接
+pool.release(db);
 ```
 
 ## 许可证
