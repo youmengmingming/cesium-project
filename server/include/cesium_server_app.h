@@ -51,6 +51,11 @@ private:
     void handleWebSocketConnection(
         const std::shared_ptr<WebSocketSession>& session,
         bool connected);
+        
+    // UDP 消息处理器
+    void handleUdpMessage(
+        const std::string& message,
+        const udp::endpoint& sender);
 
     // 模拟数据生成线程
     void simulationThread();
