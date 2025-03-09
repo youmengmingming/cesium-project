@@ -49,6 +49,47 @@ CesiumServerApp::CesiumServerApp(
             handleWebSocketConnection(session, connected);
         });
     
+    // 创建 UDP 组播服务器 (使用默认组播地址和端口)
+    udp_server_ = std::make_unique<UdpMulticastServer>("239.255.0.1", 5000);
+    
+    // 设置 UDP 消息处理器
+    udp_server_->setMessageHandler(
+        [this](const std::string& message, const udp::endpoint& sender) {
+            try {
+                auto json_value = json::parse(message);
+                auto obj = json_value.as_object();
+                
+                // 处理不同类型的消息
+                std::string type = obj["type"].as_string().c_str();
+                
+                if (type == "coordinates") {
+                    double longitude = obj["longitude"].as_double();
+                    double latitude = obj["latitude"].as_double();
+                    
+                    // 更新最新坐标
+                    {
+                        std::lock_guard<std::mutex> lock(coordinates_mutex_);
+                        latest_coordinates_.longitude = longitude;
+                        latest_coordinates_.latitude = latitude;
+                    }
+                    
+                    std::cout << "Received UDP coordinates: " << longitude << ", " << latitude << std::endl;
+                    
+                    // 广播坐标给所有 WebSocket 客户端
+                    json::object broadcast_obj;
+                    broadcast_obj["type"] = "coordinates_update";
+                    broadcast_obj["longitude"] = longitude;
+                    broadcast_obj["latitude"] = latitude;
+                    broadcast_obj["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
+                    broadcast_obj["source"] = "udp";
+                    
+                    ws_server_->broadcast(json::serialize(broadcast_obj));
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "Error processing UDP message: " << e.what() << std::endl;
+            }
+        });
+    
     std::cout << "Cesium Server Application initialized" << std::endl;
 }
 
@@ -65,6 +106,9 @@ void CesiumServerApp::run() {
     // 启动 WebSocket 服务器
     ws_server_->run();
     
+    // 启动 UDP 组播服务器
+    udp_server_->run();
+    
     // 启动模拟数据线程
     simulation_running_ = true;
     simulation_thread_ = std::thread(&CesiumServerApp::simulationThread, this);
@@ -78,6 +122,11 @@ void CesiumServerApp::stop() {
     simulation_running_ = false;
     if (simulation_thread_.joinable()) {
         simulation_thread_.join();
+    }
+    
+    // 停止 UDP 组播服务器
+    if (udp_server_) {
+        udp_server_->stop();
     }
     
     // 停止 WebSocket 服务器

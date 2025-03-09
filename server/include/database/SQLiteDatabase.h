@@ -1,16 +1,16 @@
 #pragma once
 #include "IDatabase.h"
-#include <mysql.h>
+//#include <sqlite3.h>
 #include <string>
 #include <vector>
 
 namespace server {
 namespace database {
 
-class MySQLDatabase : public IDatabase {
+class SQLiteDatabase : public IDatabase {
 public:
-    MySQLDatabase();
-    ~MySQLDatabase() override;
+    SQLiteDatabase();
+    ~SQLiteDatabase() override;
 
     bool connect(const std::string& host, int port,
                 const std::string& username, const std::string& password,
@@ -31,10 +31,10 @@ public:
     bool rollback() override;
 
 private:
-    MYSQL* mysql_;
+    //sqlite3* db_;
     bool connected_;
     std::vector<std::vector<std::string>> resultSet_;
 };
 
 } // namespace database
-} // namespace server 
+} // namespace server

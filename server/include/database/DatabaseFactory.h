@@ -8,7 +8,8 @@ namespace database {
 enum class DatabaseType {
     MYSQL,
     MONGODB,
-    DM  // 达梦数据库
+    DM,  // 达梦数据库
+    SQLITE // SQLite数据库
 };
 
 class DatabaseFactory {
@@ -21,4 +22,4 @@ private:
 };
 
 } // namespace database
-} // namespace server 
+} // namespace server

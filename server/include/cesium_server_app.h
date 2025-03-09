@@ -2,6 +2,7 @@
 
 #include "http_server.h"
 #include "websocket_server.h"
+#include "udp_multicast_server.h"
 #include <memory>
 #include <string>
 #include <thread>
@@ -59,6 +60,9 @@ private:
 
     // WebSocket 服务器
     std::unique_ptr<WebSocketServer> ws_server_;
+    
+    // UDP组播服务器
+    std::unique_ptr<UdpMulticastServer> udp_server_;
 
     // 最新坐标
     Coordinates latest_coordinates_;
