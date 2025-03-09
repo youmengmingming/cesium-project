@@ -39,13 +39,13 @@ include_directories(
 link_directories("C:/Program Files/MySQL/MySQL Server 8.0/lib")
 
 #添加头文件
-file(GLOB_RECURSE HEAD "include/*.h","include/.hpp")
+file(GLOB_RECURSE HEADS "include/*.h","include/.hpp")
 
 # 添加源文件
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
 # 创建可执行文件
-add_executable(cesium_server ${SOURCES})
+add_executable(cesium_server ${SOURCES} ${HEADS})
 
 # 链接库
 target_link_libraries(cesium_server
