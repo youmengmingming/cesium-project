@@ -7,12 +7,18 @@
 #include <sstream>
 #include <thread>
 #include <memory>
+#include <algorithm>
 
 namespace cesium_server {
 
 namespace json = boost::json;
 
-// 构造函数
+// 默认构造函数
+CesiumServerApp::CesiumServerApp()
+    : CesiumServerApp(ServerConfig()) {
+}
+
+// 基本配置构造函数
 CesiumServerApp::CesiumServerApp(
     const std::string& http_address, unsigned short http_port,
     const std::string& ws_address, unsigned short ws_port)
@@ -20,45 +26,95 @@ CesiumServerApp::CesiumServerApp(
       simulation_running_(false),
       client_count_(0) {
     
-    // 创建 HTTP 服务器
-    http_server_ = std::make_unique<HttpServer>(http_address, http_port);
+    // 设置基本配置
+    config_.http_address = http_address;
+    config_.http_port = http_port;
+    config_.ws_address = ws_address;
+    config_.ws_port = ws_port;
     
-    // 注册 HTTP 路由
-    http_server_->registerHandler("/coordinates", 
-        [this](const http::request<http::string_body>& req, const std::string& path) {
-            return handleCoordinatesRequest(req);
-        });
+    // 初始化服务器
+    initialize();
+}
+
+// 完整配置构造函数
+CesiumServerApp::CesiumServerApp(const ServerConfig& config)
+    : config_(config),
+      latest_coordinates_({0.0, 0.0}),
+      simulation_running_(false),
+      client_count_(0) {
     
-    http_server_->registerHandler("/", 
-        [this](const http::request<http::string_body>& req, const std::string& path) {
-            return handleHttpRequest(req, path);
-        });
-    
-    // 创建 WebSocket 服务器
-    ws_server_ = std::make_unique<WebSocketServer>(ws_address, ws_port);
-    
-    // 设置 WebSocket 消息处理器
-    ws_server_->setMessageHandler(
-        [this](const std::string& message, const std::shared_ptr<WebSocketSession>& session) {
-            handleWebSocketMessage(message, session);
-        });
-    
-    // 设置 WebSocket 连接处理器
-    ws_server_->setConnectionHandler(
-        [this](const std::shared_ptr<WebSocketSession>& session, bool connected) {
-            handleWebSocketConnection(session, connected);
-        });
-    
-    // 创建 UDP 组播服务器 (使用默认组播地址和端口)
-    udp_server_ = std::make_unique<UdpMulticastServer>("239.255.0.1", 5000);
-    
-    // 设置 UDP 消息处理器
-    udp_server_->setMessageHandler(
-        [this](const std::string& message, const udp::endpoint& sender) {
-            handleUdpMessage(message, sender);
-        });
-    
-    std::cout << "Cesium Server Application initialized" << std::endl;
+    // 初始化服务器
+    initialize();
+}
+
+// 初始化服务器
+void CesiumServerApp::initialize() {
+    try {
+        // 创建 HTTP 服务器
+        http_server_ = std::make_unique<HttpServer>(
+            config_.http_address, config_.http_port, config_.http_threads);
+        
+        // 注册 HTTP 路由
+        http_server_->registerHandler("/coordinates", 
+            [this](const http::request<http::string_body>& req, const std::string& path) {
+                return handleCoordinatesRequest(req);
+            });
+        
+        http_server_->registerHandler("/", 
+            [this](const http::request<http::string_body>& req, const std::string& path) {
+                return handleHttpRequest(req, path);
+            });
+        
+        // 创建 WebSocket 服务器
+        ws_server_ = std::make_unique<WebSocketServer>(
+            config_.ws_address, config_.ws_port, config_.ws_threads);
+        
+        // 设置 WebSocket 消息处理器
+        ws_server_->setMessageHandler(
+            [this](const std::string& message, const std::shared_ptr<WebSocketSession>& session) {
+                handleWebSocketMessage(message, session);
+            });
+        
+        // 设置 WebSocket 连接处理器
+        ws_server_->setConnectionHandler(
+            [this](const std::shared_ptr<WebSocketSession>& session, bool connected) {
+                handleWebSocketConnection(session, connected);
+            });
+        
+        // 创建 UDP 组播服务器
+        udp_server_ = std::make_unique<UdpMulticastServer>(
+            config_.udp_multicast_address, 
+            config_.udp_port,
+            config_.udp_listen_address,
+            config_.udp_buffer_size);
+        
+        // 设置 UDP 消息处理器
+        udp_server_->setMessageHandler(
+            [this](const std::string& message, const udp::endpoint& sender) {
+                handleUdpMessage(message, sender);
+            });
+        
+        // 创建 ZeroMQ 服务器
+        if (config_.enable_zmq) {
+            zmq_server_ = std::make_unique<ZeroMQServer>(
+                config_.zmq_address,
+                config_.zmq_port,
+                config_.zmq_mode,
+                config_.zmq_io_threads);
+            
+            // 设置 ZeroMQ 消息处理器
+            zmq_server_->setMessageHandler(
+                [this](const std::string& message, const std::string& topic) {
+                    handleZmqMessage(message, topic);
+                });
+        }
+        
+        std::cout << "Cesium Server Application initialized" << std::endl;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error initializing Cesium Server Application: " << e.what() << std::endl;
+        throw;
+    }
 }
 
 // 析构函数
@@ -68,20 +124,40 @@ CesiumServerApp::~CesiumServerApp() {
 
 // 启动服务器
 void CesiumServerApp::run() {
-    // 启动 HTTP 服务器
-    http_server_->run();
-    
-    // 启动 WebSocket 服务器
-    ws_server_->run();
-    
-    // 启动 UDP 组播服务器
-    udp_server_->run();
-    
-    // 启动模拟数据线程
-    simulation_running_ = true;
-    simulation_thread_ = std::thread(&CesiumServerApp::simulationThread, this);
-    
-    std::cout << "Cesium Server Application running" << std::endl;
+    try {
+        // 启动 HTTP 服务器
+        if (http_server_) {
+            http_server_->run();
+        }
+        
+        // 启动 WebSocket 服务器
+        if (ws_server_) {
+            ws_server_->run();
+        }
+        
+        // 启动 UDP 组播服务器
+        if (udp_server_) {
+            udp_server_->run();
+        }
+        
+        // 启动 ZeroMQ 服务器
+        if (zmq_server_ && config_.enable_zmq) {
+            zmq_server_->run();
+        }
+        
+        // 启动模拟数据线程
+        if (config_.enable_simulation) {
+            simulation_running_ = true;
+            simulation_thread_ = std::thread(&CesiumServerApp::simulationThread, this);
+        }
+        
+        std::cout << "Cesium Server Application running" << std::endl;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error starting Cesium Server Application: " << e.what() << std::endl;
+        stop();
+        throw;
+    }
 }
 
 // 停止服务器
@@ -92,22 +168,139 @@ void CesiumServerApp::stop() {
         simulation_thread_.join();
     }
     
+    // 停止 ZeroMQ 服务器
+    if (zmq_server_) {
+        try {
+            zmq_server_->stop();
+        } catch (const std::exception& e) {
+            std::cerr << "Error stopping ZeroMQ server: " << e.what() << std::endl;
+        }
+    }
+    
     // 停止 UDP 组播服务器
     if (udp_server_) {
-        udp_server_->stop();
+        try {
+            udp_server_->stop();
+        } catch (const std::exception& e) {
+            std::cerr << "Error stopping UDP server: " << e.what() << std::endl;
+        }
     }
     
     // 停止 WebSocket 服务器
     if (ws_server_) {
-        ws_server_->stop();
+        try {
+            ws_server_->stop();
+        } catch (const std::exception& e) {
+            std::cerr << "Error stopping WebSocket server: " << e.what() << std::endl;
+        }
     }
     
     // 停止 HTTP 服务器
     if (http_server_) {
-        http_server_->stop();
+        try {
+            http_server_->stop();
+        } catch (const std::exception& e) {
+            std::cerr << "Error stopping HTTP server: " << e.what() << std::endl;
+        }
+    }
+    
+    // 清空客户端会话
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        client_sessions_.clear();
     }
     
     std::cout << "Cesium Server Application stopped" << std::endl;
+}
+
+// 获取最新坐标
+Coordinates CesiumServerApp::getLatestCoordinates() const {
+    std::lock_guard<std::mutex> lock(coordinates_mutex_);
+    return latest_coordinates_;
+}
+
+// 更新坐标
+void CesiumServerApp::updateCoordinates(const Coordinates& coords) {
+    {
+        std::lock_guard<std::mutex> lock(coordinates_mutex_);
+        latest_coordinates_ = coords;
+    }
+    
+    // 创建广播消息
+    json::object broadcast_obj;
+    broadcast_obj["type"] = "coordinates_update";
+    broadcast_obj["longitude"] = coords.longitude;
+    broadcast_obj["latitude"] = coords.latitude;
+    broadcast_obj["altitude"] = coords.altitude;
+    broadcast_obj["timestamp"] = coords.timestamp;
+    
+    // 广播给所有WebSocket客户端
+    try {
+        if (ws_server_ && client_count_.load() > 0) {
+            ws_server_->broadcast(json::serialize(broadcast_obj));
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error broadcasting coordinates update: " << e.what() << std::endl;
+    }
+}
+
+// 处理 ZeroMQ 消息
+void CesiumServerApp::handleZmqMessage(const std::string& message, const std::string& topic) {
+    try {
+        // 解析消息
+        auto msg = json::parse(message);
+        
+        // 根据消息类型处理
+        if (msg.is_object()) {
+            auto obj = msg.as_object();
+            if (obj.contains("type")) {
+                std::string type = obj["type"].as_string().c_str();
+                
+                if (type == "get_coordinates") {
+                    // 获取坐标请求
+                    auto coords = getLatestCoordinates();
+                    
+                    // 创建响应
+                    json::object response;
+                    response["type"] = "coordinates";
+                    response["longitude"] = coords.longitude;
+                    response["latitude"] = coords.latitude;
+                    response["altitude"] = coords.altitude;
+                    response["timestamp"] = coords.timestamp;
+                    
+                    // 发送响应
+                    if (zmq_server_) {
+                        zmq_server_->sendMessage(json::serialize(response), topic);
+                    }
+                }
+                else if (type == "update_coordinates") {
+                    // 更新坐标请求
+                    if (obj.contains("longitude") && obj.contains("latitude")) {
+                        double longitude = obj["longitude"].to_number<double>();
+                        double latitude = obj["latitude"].to_number<double>();
+                        double altitude = obj.contains("altitude") ? 
+                            obj["altitude"].to_number<double>() : 0.0;
+                        
+                        // 更新坐标
+                        updateCoordinates({longitude, latitude, altitude});
+                        
+                        // 创建响应
+                        json::object response;
+                        response["type"] = "coordinates_updated";
+                        response["status"] = "ok";
+                        
+                        // 发送响应
+                        if (zmq_server_) {
+                            zmq_server_->sendMessage(json::serialize(response), topic);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error handling ZeroMQ message: " << e.what() << std::endl;
+    }
 }
 
 // HTTP 请求处理器
@@ -138,6 +331,14 @@ http::response<http::string_body> CesiumServerApp::handleHttpRequest(
         response["message"] = "Cesium Server is running";
         response["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
         response["clients"] = client_count_.load();
+        
+        // 添加服务器配置信息
+        json::object config;
+        config["http_port"] = config_.http_port;
+        config["ws_port"] = config_.ws_port;
+        config["udp_port"] = config_.udp_port;
+        config["udp_multicast_address"] = config_.udp_multicast_address;
+        response["config"] = config;
         
         res.body() = json::serialize(response);
         res.prepare_payload();
@@ -184,28 +385,20 @@ http::response<http::string_body> CesiumServerApp::handleCoordinatesRequest(
             // 提取坐标
             double longitude = obj["longitude"].as_double();
             double latitude = obj["latitude"].as_double();
+            double altitude = 0.0;
             
-            // 更新最新坐标
-            {
-                std::lock_guard<std::mutex> lock(coordinates_mutex_);
-                latest_coordinates_.longitude = longitude;
-                latest_coordinates_.latitude = latitude;
+            // 尝试获取高度（可选）
+            if (obj.contains("altitude")) {
+                altitude = obj["altitude"].as_double();
             }
             
-            std::cout << "Received coordinates: " << longitude << ", " << latitude << std::endl;
+            // 创建坐标对象
+            Coordinates coords(longitude, latitude, altitude);
             
-            // 广播坐标给所有 WebSocket 客户端
-            json::object broadcast_obj;
-            broadcast_obj["type"] = "coordinates_update";
-            broadcast_obj["longitude"] = longitude;
-            broadcast_obj["latitude"] = latitude;
-            broadcast_obj["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
+            // 更新最新坐标并广播
+            updateCoordinates(coords);
             
-            try {
-                ws_server_->broadcast(json::serialize(broadcast_obj));
-            } catch (const std::exception& e) {
-                std::cerr << "Error broadcasting coordinates update: " << e.what() << std::endl;
-            }
+            std::cout << "Received coordinates: " << longitude << ", " << latitude << ", " << altitude << std::endl;
             
             // 返回成功响应
             res.body() = json::serialize(json::object{
@@ -228,12 +421,13 @@ http::response<http::string_body> CesiumServerApp::handleCoordinatesRequest(
     
     // 处理 GET 请求（获取坐标）
     if (req.method() == http::verb::get) {
-        std::lock_guard<std::mutex> lock(coordinates_mutex_);
+        Coordinates coords = getLatestCoordinates();
         
         json::object response;
-        response["longitude"] = latest_coordinates_.longitude;
-        response["latitude"] = latest_coordinates_.latitude;
-        response["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
+        response["longitude"] = coords.longitude;
+        response["latitude"] = coords.latitude;
+        response["altitude"] = coords.altitude;
+        response["timestamp"] = coords.timestamp;
         
         res.body() = json::serialize(response);
         res.prepare_payload();
@@ -282,6 +476,7 @@ void CesiumServerApp::handleWebSocketMessage(
             response["type"] = "coordinates";
             response["longitude"] = latest_coordinates_.longitude;
             response["latitude"] = latest_coordinates_.latitude;
+            response["altitude"] = latest_coordinates_.altitude;
             response["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
             
             // 发送响应

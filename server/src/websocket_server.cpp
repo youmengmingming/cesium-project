@@ -117,7 +117,7 @@ void WebSocketSession::doWrite() {
     }
     
     // 确保WebSocket连接处于开放状态
-    if (!ws_.is_open()) {
+    if (!is_open_ || !ws_.is_open()) {
         std::cerr << "WebSocket is closed, cannot send message" << std::endl;
         writing_ = false;
         return;
@@ -331,8 +331,10 @@ void WebSocketServer::broadcast(const std::string& message) {
     // 在锁外发送消息给所有会话
     for (const auto& session : session_snapshot) {
         try {
-            // 为每个会话传递消息的副本
-            session->send(message_copy);
+            if (session && session->getStream().is_open()) {
+                // 为每个会话传递消息的副本
+                session->send(message_copy);
+            }
         } catch (const std::exception& e) {
             std::cerr << "Error broadcasting message: " << e.what() << std::endl;
         }
@@ -418,4 +420,4 @@ void WebSocketServer::doAccept() {
             }));
 }
 
-} // namespace cesium_server 
+} // namespace cesium_server

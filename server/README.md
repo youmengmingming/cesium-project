@@ -1,6 +1,76 @@
-# Cesium 项目后端服务器
+# Cesium Server
 
-这是一个用 C++ 编写的后端服务器，用于与 Cesium 前端项目进行交互。服务器提供 HTTP API 和 WebSocket 接口，支持常规请求和不间断通信。
+这是一个基于Boost.Beast的高性能Cesium服务器，提供HTTP、WebSocket和UDP组播功能，用于实时地理空间数据传输。
+
+## 功能特点
+
+- **HTTP服务器**：提供RESTful API接口，支持坐标数据的获取和更新
+- **WebSocket服务器**：支持实时双向通信，用于坐标数据的实时推送
+- **UDP组播服务器**：支持高效的一对多数据分发，适用于广播场景
+- **模拟数据生成**：内置模拟数据生成功能，方便测试和演示
+
+## 系统架构
+
+系统由以下主要组件构成：
+
+- `CesiumServerApp`：应用程序主类，协调各服务器组件
+- `HttpServer`：基于Boost.Beast的HTTP服务器实现
+- `WebSocketServer`：基于Boost.Beast的WebSocket服务器实现
+- `UdpMulticastServer`：基于Boost.Asio的UDP组播服务器实现
+
+## 构建要求
+
+- C++17兼容的编译器
+- CMake 3.10+
+- Boost 1.87.0+
+- OpenSSL
+
+## 构建步骤
+
+```bash
+# 创建构建目录
+mkdir build
+cd build
+
+# 配置CMake
+cmake ..
+
+# 构建项目
+cmake --build .
+```
+
+## 使用方法
+
+```bash
+# 使用默认配置启动服务器
+./cesium_server
+
+# 指定HTTP和WebSocket端口
+./cesium_server --http-port 8080 --ws-port 8081
+```
+
+## API文档
+
+### HTTP API
+
+- `GET /coordinates` - 获取最新坐标
+- `POST /coordinates` - 更新坐标
+
+### WebSocket消息
+
+- `{"type": "ping"}` - 心跳检测
+- `{"type": "get_coordinates"}` - 请求当前坐标
+
+### UDP组播
+
+默认组播地址：239.255.0.1:5000
+
+## 性能优化
+
+- 使用异步I/O和事件驱动架构
+- 实现消息队列和批处理机制
+- 优化内存管理和资源使用
+- 增强错误处理和恢复机制
 
 ## 功能特点
 
@@ -332,3 +402,21 @@ server/
 ├── CMakeLists.txt            # CMake 构建配置
 └── README.md                 # 使用说明
 ```
+
+
+- UDP组播服务器优化
+
+- 增加了错误恢复机制，当连接出现问题时能自动重连组播组
+- 实现了异步消息队列，提高了消息处理效率
+- 添加了缓冲区大小配置，优化了内存使用
+- 增强了错误处理能力，提高了服务稳定性
+- WebSocket服务器优化
+
+- 改进了消息队列处理机制，确保消息按顺序发送
+- 增强了会话管理，提高了连接稳定性
+- 优化了广播功能，减少锁竞争
+- CesiumServerApp优化
+
+- 完善了配置管理系统，使服务器更易于配置
+- 增强了错误处理和恢复机制
+- 改进了坐标数据处理和广播功能

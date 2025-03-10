@@ -1,4 +1,4 @@
- #include "cesium_server_app.h"
+#include "cesium_server_app.h"
 #include <iostream>
 #include <string>
 #include <csignal>
@@ -19,23 +19,38 @@ void signalHandler(int signal) {
 
 int main(int argc, char* argv[]) {
     try {
-        // 默认配置
-        std::string http_address = "0.0.0.0";
-        unsigned short http_port = 3000;
-        std::string ws_address = "0.0.0.0";
-        unsigned short ws_port = 3001;
+        // 创建服务器配置
+        cesium_server::ServerConfig config;
         
         // 解析命令行参数
         for (int i = 1; i < argc; ++i) {
             std::string arg = argv[i];
             if (arg == "--http-address" && i + 1 < argc) {
-                http_address = argv[++i];
+                config.http_address = argv[++i];
             } else if (arg == "--http-port" && i + 1 < argc) {
-                http_port = static_cast<unsigned short>(std::stoi(argv[++i]));
+                config.http_port = static_cast<unsigned short>(std::stoi(argv[++i]));
             } else if (arg == "--ws-address" && i + 1 < argc) {
-                ws_address = argv[++i];
+                config.ws_address = argv[++i];
             } else if (arg == "--ws-port" && i + 1 < argc) {
-                ws_port = static_cast<unsigned short>(std::stoi(argv[++i]));
+                config.ws_port = static_cast<unsigned short>(std::stoi(argv[++i]));
+            } else if (arg == "--zmq-address" && i + 1 < argc) {
+                config.zmq_address = argv[++i];
+            } else if (arg == "--zmq-port" && i + 1 < argc) {
+                config.zmq_port = static_cast<unsigned short>(std::stoi(argv[++i]));
+            } else if (arg == "--zmq-mode" && i + 1 < argc) {
+                std::string mode = argv[++i];
+                if (mode == "req-rep") {
+                    config.zmq_mode = cesium_server::ZeroMQServer::Mode::REQ_REP;
+                } else if (mode == "pub-sub") {
+                    config.zmq_mode = cesium_server::ZeroMQServer::Mode::PUB_SUB;
+                } else if (mode == "push-pull") {
+                    config.zmq_mode = cesium_server::ZeroMQServer::Mode::PUSH_PULL;
+                } else {
+                    std::cerr << "Unknown ZeroMQ mode: " << mode << std::endl;
+                    return 1;
+                }
+            } else if (arg == "--zmq-disable") {
+                config.enable_zmq = false;
             } else if (arg == "--help") {
                 std::cout << "Usage: " << argv[0] << " [options]\n"
                           << "Options:\n"
@@ -43,6 +58,10 @@ int main(int argc, char* argv[]) {
                           << "  --http-port <port>        HTTP server port (default: 3000)\n"
                           << "  --ws-address <address>    WebSocket server address (default: 0.0.0.0)\n"
                           << "  --ws-port <port>          WebSocket server port (default: 3001)\n"
+                          << "  --zmq-address <address>   ZeroMQ server address (default: 0.0.0.0)\n"
+                          << "  --zmq-port <port>         ZeroMQ server port (default: 5555)\n"
+                          << "  --zmq-mode <mode>         ZeroMQ mode (req-rep|pub-sub|push-pull) (default: req-rep)\n"
+                          << "  --zmq-disable             Disable ZeroMQ server\n"
                           << "  --help                    Show this help message\n";
                 return 0;
             }
@@ -53,15 +72,20 @@ int main(int argc, char* argv[]) {
         std::signal(SIGTERM, signalHandler);
         
         // 创建服务器应用程序
-        cesium_server::CesiumServerApp app(http_address, http_port, ws_address, ws_port);
+        cesium_server::CesiumServerApp app(config);
         g_app = &app;
         
         // 启动服务器
         app.run();
         
         std::cout << "Server started. Press Ctrl+C to stop." << std::endl;
-        std::cout << "HTTP server: http://" << http_address << ":" << http_port << std::endl;
-        std::cout << "WebSocket server: ws://" << ws_address << ":" << ws_port << std::endl;
+        std::cout << "HTTP server: http://" << config.http_address << ":" << config.http_port << std::endl;
+        std::cout << "WebSocket server: ws://" << config.ws_address << ":" << config.ws_port << std::endl;
+        if (config.enable_zmq) {
+            std::cout << "ZeroMQ server: tcp://" << config.zmq_address << ":" << config.zmq_port;
+            std::cout << " (mode: " << (config.zmq_mode == cesium_server::ZeroMQServer::Mode::REQ_REP ? "req-rep" :
+                                      config.zmq_mode == cesium_server::ZeroMQServer::Mode::PUB_SUB ? "pub-sub" : "push-pull") << ")" << std::endl;
+        }
         
         // 主线程等待，直到收到信号
         while (true) {
