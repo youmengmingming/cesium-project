@@ -1,4 +1,4 @@
- #include "../include/udp_multicast_server.h"
+#include "../include/udp_multicast_server.h"
 #include <boost/asio.hpp>
 #include <iostream>
 #include <memory>
@@ -78,15 +78,18 @@ void UdpMulticastServer::run() {
 	// 开始接收消息
 	doReceive();
 
-	// 启动IO线程
-	io_thread_ = std::thread([this]() {
+	// 初始化线程池
+	thread_pool_ = std::make_unique<ThreadPool>(1);
+
+	// 启动IO上下文
+	thread_pool_->enqueue([this]() {
 		try {
 			io_context_.run();
 		}
 		catch (const std::exception& e) {
 			std::cerr << "UDP Multicast Server IO error: " << e.what() << std::endl;
 		}
-		});
+	});
 
 	std::cout << "UDP Multicast Server running" << std::endl;
 }
@@ -109,10 +112,8 @@ void UdpMulticastServer::stop() {
 		std::cerr << "Error closing socket: " << ec.message() << std::endl;
 	}
 
-	// 等待IO线程结束
-	if (io_thread_.joinable()) {
-		io_thread_.join();
-	}
+	// 销毁线程池
+	thread_pool_.reset();
 
 	// 重置io_context
 	io_context_.stop();

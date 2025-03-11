@@ -1,4 +1,5 @@
 #include "cesium_server_app.h"
+#include "logger.h"
 #include <boost/json.hpp>
 #include <chrono>
 #include <cmath>
@@ -50,12 +51,18 @@ CesiumServerApp::CesiumServerApp(const ServerConfig& config)
 // 初始化服务器
 void CesiumServerApp::initialize() {
     try {
+        // 初始化日志系统
+        Logger::initialize(); 
+        
+        spdlog::info("开始初始化Cesium服务器应用程序");
+
         // 创建 HTTP 服务器
         http_server_ = std::make_unique<HttpServer>(
             config_.http_address, config_.http_port, config_.http_threads);
-        
+        spdlog::info("HTTP服务器初始化完成，监听地址: {}:{}", config_.http_address, config_.http_port);
+
         // 注册 HTTP 路由
-        http_server_->registerHandler("/coordinates", 
+        http_server_->registerHandler("/coordinates",
             [this](const http::request<http::string_body>& req, const std::string& path) {
                 return handleCoordinatesRequest(req);
             });

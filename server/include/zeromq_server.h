@@ -11,6 +11,7 @@
 #include <atomic>
 #include <queue>
 #include <unordered_map>
+#include "thread_pool.h"
 
 namespace cesium_server {
 
@@ -104,6 +105,9 @@ namespace cesium_server {
 
 		// IO线程数
 		int io_threads_;
+
+		// 线程池
+		std::unique_ptr<ThreadPool> thread_pool_;
 	};
 
 } // namespace cesium_server

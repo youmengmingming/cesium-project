@@ -11,7 +11,9 @@
 #include <atomic>
 #include <chrono>
 #include <queue>
+#include "thread_pool.h"
 
+using namespace cesium_server;
 namespace net = boost::asio;
 using udp = boost::asio::ip::udp;
 
@@ -84,8 +86,8 @@ private:
 	// 消息处理器
 	UdpMessageHandler message_handler_;
 
-	// IO线程
-	std::thread io_thread_;
+	// 线程池
+	std::unique_ptr<ThreadPool> thread_pool_;
 
 	// 运行标志
 	std::atomic<bool> running_;

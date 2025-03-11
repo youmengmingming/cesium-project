@@ -17,7 +17,7 @@ namespace cesium_server {
 // HTTP 服务器构造函数
 HttpServer::HttpServer(const std::string& address, unsigned short port, int threads)
     : address_(address), port_(port), num_threads_(threads), 
-      ioc_(threads), acceptor_(net::make_strand(ioc_)), running_(false) {
+      ioc_(1), acceptor_(net::make_strand(ioc_)), running_(false) {
     
     beast::error_code ec;
 
@@ -63,16 +63,27 @@ void HttpServer::run() {
     if (running_) return;
     running_ = true;
 
+    // 初始化线程池
+    thread_pool_ = std::make_unique<ThreadPool>(num_threads_);
+
     // 开始接受连接
     doAccept();
 
-    // 启动工作线程
-    threads_.reserve(num_threads_);
+    // 启动IO上下文
+    std::vector<std::thread> io_threads;
+    io_threads.reserve(num_threads_);
     for (int i = 0; i < num_threads_; ++i) {
-        threads_.emplace_back([this] { ioc_.run(); });
+        io_threads.emplace_back([this] { ioc_.run(); });
     }
 
     std::cout << "HTTP server running with " << num_threads_ << " threads" << std::endl;
+
+    // 等待IO线程完成
+    for (auto& t : io_threads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
 }
 
 // 停止服务器
@@ -87,13 +98,8 @@ void HttpServer::stop() {
     // 停止 IO 上下文
     ioc_.stop();
 
-    // 等待所有线程完成
-    for (auto& t : threads_) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
-    threads_.clear();
+    // 销毁线程池
+    thread_pool_.reset();
 
     std::cout << "HTTP server stopped" << std::endl;
 }
@@ -111,8 +117,8 @@ void HttpServer::doAccept() {
         beast::bind_front_handler(
             [this](beast::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    // 创建新的会话处理请求
-                    std::thread(&HttpServer::handleRequest, this, std::move(socket)).detach();
+                    // 使用线程池处理请求
+                    thread_pool_->enqueue(&HttpServer::handleRequest, this, std::move(socket));
                 } else {
                     std::cerr << "Accept error: " << ec.message() << std::endl;
                 }

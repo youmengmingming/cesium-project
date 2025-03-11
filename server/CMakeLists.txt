@@ -5,6 +5,11 @@ project(cesium_server VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 添加UTF-8编译支持
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 
 #设置三方库
 set(ThirdPart_DIR "D:/thirdPart")
@@ -44,6 +49,10 @@ set(ZMQ_LIBRARIES "${ZMQ_ROOT_DIR}/lib/Debug/libzmq-mt-gd-4_0_10.lib")
 
 
 
+# 设置spdlog库根目录
+set(SPDLOG_ROOT_DIR "D:/thirdPart/spdlog/")
+set(SPDLOG_NO_SYSTEM_PATHS ON)
+
 # 包含目录
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -52,12 +61,13 @@ include_directories(
     ${ZMQ_INCLUDE_DIRS}
     ${CPPZMQ_ROOT_DIR}
     ${ThirdPart_DIR}/sqlite/include
+    ${SPDLOG_ROOT_DIR}/include
 )
 
 link_directories("C:/Program Files/MySQL/MySQL Server 8.0/lib")
 
 #添加头文件
-file(GLOB_RECURSE HEADS "include/*.h","include/.hpp")
+file(GLOB_RECURSE HEADS "include/*.h", "include/.hpp")
 
 # 添加源文件
 file(GLOB_RECURSE SOURCES "src/*.cpp")
@@ -76,6 +86,7 @@ target_link_libraries(cesium_server
     wsock32
     libmysql
     "${ThirdPart_DIR}/sqlite/lib/sqlite3.lib"
+    "${SPDLOG_ROOT_DIR}/lib/spdlog.lib"
 )
 
 # 安装目标

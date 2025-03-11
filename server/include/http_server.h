@@ -1,4 +1,4 @@
- #pragma once
+#pragma once
 
 #include <boost/asio.hpp>
 #include <boost/beast/core.hpp>
@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "thread_pool.h"
 
 namespace cesium_server {
 
@@ -58,7 +59,7 @@ private:
     // IO 上下文和接收器
     net::io_context ioc_;
     tcp::acceptor acceptor_;
-    std::vector<std::thread> threads_;
+    std::unique_ptr<ThreadPool> thread_pool_;
 
     // 路由表
     std::map<std::string, HttpRequestHandler> handlers_;

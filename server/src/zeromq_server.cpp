@@ -74,18 +74,21 @@ namespace cesium_server {
 			// 设置运行标志
 			running_ = true;
 
-			// 根据通信模式启动相应的处理线程
+			// 初始化线程池
+			thread_pool_ = std::make_unique<ThreadPool>(1);
+
+			// 根据通信模式启动相应的处理任务
 			switch (mode_) {
 			case Mode::REQ_REP:
-				worker_thread_ = std::thread(&ZeroMQServer::handleReqRep, this);
+				thread_pool_->enqueue(&ZeroMQServer::handleReqRep, this);
 				break;
 
 			case Mode::PUB_SUB:
-				worker_thread_ = std::thread(&ZeroMQServer::handlePubSub, this);
+				thread_pool_->enqueue(&ZeroMQServer::handlePubSub, this);
 				break;
 
 			case Mode::PUSH_PULL:
-				worker_thread_ = std::thread(&ZeroMQServer::handlePushPull, this);
+				thread_pool_->enqueue(&ZeroMQServer::handlePushPull, this);
 				break;
 			}
 
@@ -110,10 +113,8 @@ namespace cesium_server {
 		// 设置停止标志
 		running_ = false;
 
-		// 等待工作线程结束
-		if (worker_thread_.joinable()) {
-			worker_thread_.join();
-		}
+		// 销毁线程池
+		thread_pool_.reset();
 
 		try {
 			// 关闭套接字
