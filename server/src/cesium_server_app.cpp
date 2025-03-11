@@ -215,7 +215,7 @@ void CesiumServerApp::stop() {
 
 // 获取最新坐标
 Coordinates CesiumServerApp::getLatestCoordinates() const {
-    std::lock_guard<std::mutex> lock(coordinates_mutex_);
+    //std::lock_guard<std::mutex> lock(coordinates_mutex_);
     return latest_coordinates_;
 }
 

@@ -1,6 +1,6 @@
 #pragma once
 #include "IDatabase.h"
-//#include <sqlite3.h>
+#include <sqlite3.h>
 #include <string>
 #include <vector>
 
@@ -31,7 +31,7 @@ public:
     bool rollback() override;
 
 private:
-    //sqlite3* db_;
+    sqlite3* db_;
     bool connected_;
     std::vector<std::vector<std::string>> resultSet_;
 };

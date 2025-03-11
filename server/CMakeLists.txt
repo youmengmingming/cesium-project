@@ -5,11 +5,15 @@ project(cesium_server VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+
+#设置三方库
+set(ThirdPart_DIR "D:/thirdPart")
+
 #设置Boost库根目录
 set(BOOST_ROOT "D:/thirdPart/boost/boost1.87.0")
 set(OPENSSL_ROOT_DIR "D:/thirdPart/openssl/openssl3.4.1/debug")
 set(MYSQL_ROOT_DIR "C:/Program Files/MySQL/MySQL Server 8.0/")
-#set(SQLITE3_ROOT_DIR "D:/thirdPart/sqlite/sqlite3.42.0")
+set(SQLITE3_ROOT_DIR "D:/thirdPart/sqlite")
 
 # 设置ZeroMQ库根目录
 set(ZMQ_ROOT_DIR "D:/thirdPart/zmq/")
@@ -19,7 +23,7 @@ set(CPPZMQ_ROOT_DIR "D:/thirdPart/cppzmq/")
 set(Boost_NO__SYSTEM_PATHS_ON)
 set(OpenSSL_NO__SYSTEM_PATHS_ON)
 set(MySQL_NO_SYSTEM_PATHS ON)
-#set(SQLite3_NO_SYSTEM_PATHS ON)
+set(SQLite3_NO_SYSTEM_PATHS ON)
 set(ZMQ_NO_SYSTEM_PATHS ON)
 
 # 查找必要的包
@@ -38,6 +42,8 @@ set(MySQL_INCLUDE_DIRS "${MYSQL_ROOT_DIR}/include")
 set(ZMQ_INCLUDE_DIRS "${ZMQ_ROOT_DIR}/include")
 set(ZMQ_LIBRARIES "${ZMQ_ROOT_DIR}/lib/Debug/libzmq-mt-gd-4_0_10.lib")
 
+
+
 # 包含目录
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -45,6 +51,7 @@ include_directories(
     ${MySQL_INCLUDE_DIRS}
     ${ZMQ_INCLUDE_DIRS}
     ${CPPZMQ_ROOT_DIR}
+    ${ThirdPart_DIR}/sqlite/include
 )
 
 link_directories("C:/Program Files/MySQL/MySQL Server 8.0/lib")
@@ -68,6 +75,7 @@ target_link_libraries(cesium_server
     ws2_32
     wsock32
     libmysql
+    "${ThirdPart_DIR}/sqlite/lib/sqlite3.lib"
 )
 
 # 安装目标
