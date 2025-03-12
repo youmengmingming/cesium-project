@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package cesium_server;
+
+// 坐标数据结构
+message Coordinates {
+    double latitude = 1;
+    double longitude = 2;
+    double altitude = 3;
+    string timestamp = 4;
+}
+
+// 状态响应
+message StatusResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// 坐标更新请求
+message CoordinatesUpdateRequest {
+    Coordinates coordinates = 1;
+    string client_id = 2;
+}
+
+// 坐标流请求
+message CoordinatesStreamRequest {
+    string client_id = 1;
+    string filter = 2;
+}
+
+// CesiumService定义了主要的gRPC服务接口
+service CesiumService {
+    // 更新坐标
+    rpc UpdateCoordinates(CoordinatesUpdateRequest) returns (StatusResponse);
+    
+    // 获取最新坐标
+    rpc GetLatestCoordinates(CoordinatesStreamRequest) returns (Coordinates);
+    
+    // 订阅坐标流
+    rpc SubscribeCoordinates(CoordinatesStreamRequest) returns (stream Coordinates);
+    
+    // 双向坐标流
+    rpc StreamCoordinates(stream CoordinatesUpdateRequest) returns (stream Coordinates);
+}

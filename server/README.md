@@ -7,6 +7,8 @@
 - **HTTP服务器**：提供RESTful API接口，支持坐标数据的获取和更新
 - **WebSocket服务器**：支持实时双向通信，用于坐标数据的实时推送
 - **UDP组播服务器**：支持高效的一对多数据分发，适用于广播场景
+- **gRPC服务**：提供高性能的双向流通信，支持坐标数据的实时更新和订阅
+- **Redis缓存**：使用Redis进行数据缓存和消息队列管理，提升系统性能
 - **模拟数据生成**：内置模拟数据生成功能，方便测试和演示
 
 ## 系统架构
@@ -17,6 +19,8 @@
 - `HttpServer`：基于Boost.Beast的HTTP服务器实现
 - `WebSocketServer`：基于Boost.Beast的WebSocket服务器实现
 - `UdpMulticastServer`：基于Boost.Asio的UDP组播服务器实现
+- `CesiumService`：基于gRPC的坐标服务实现
+- `RedisPool`：Redis连接池管理，提供缓存和消息队列支持
 
 ## 构建要求
 
@@ -86,6 +90,8 @@ cmake --build .
 - CMake 3.10 或更高版本
 - Boost 库 (system, thread)
 - OpenSSL
+- gRPC
+- Redis
 
 ## 构建说明
 
@@ -116,6 +122,8 @@ cmake --build .
    ```
    sudo apt-get update
    sudo apt-get install build-essential cmake libboost-all-dev libssl-dev
+   sudo apt-get install protobuf-compiler libprotobuf-dev
+   sudo apt-get install redis-server
    ```
 
 2. 构建项目：
@@ -379,6 +387,71 @@ if (user) {
 
 // 释放数据库连接
 pool.release(db);
+```
+
+### gRPC服务
+
+#### 服务定义
+
+```protobuf
+service CesiumService {
+    // 更新坐标
+    rpc UpdateCoordinates(CoordinatesUpdateRequest) returns (StatusResponse);
+    
+    // 获取最新坐标
+    rpc GetLatestCoordinates(CoordinatesStreamRequest) returns (Coordinates);
+    
+    // 订阅坐标流
+    rpc SubscribeCoordinates(CoordinatesStreamRequest) returns (stream Coordinates);
+    
+    // 双向坐标流
+    rpc StreamCoordinates(stream CoordinatesUpdateRequest) returns (stream Coordinates);
+}
+```
+
+#### 使用示例
+
+```cpp
+// 创建gRPC客户端
+std::string target_str = "localhost:50051";
+CesiumClient client(
+    grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
+
+// 更新坐标
+client.UpdateCoordinates(39.9073, 116.3912, 100);
+
+// 获取最新坐标
+client.GetLatestCoordinates();
+
+// 订阅坐标流
+client.SubscribeCoordinates();
+
+// 使用双向流
+client.StreamCoordinates();
+```
+
+### Redis缓存服务
+
+#### 连接池配置
+
+```cpp
+// 初始化Redis连接池
+RedisPool::getInstance().init(
+    "localhost",    // Redis服务器地址
+    6379,           // Redis端口
+    "",            // 密码（如果有）
+    10              // 连接池大小
+);
+
+// 获取Redis连接
+auto redis = RedisPool::getInstance().acquire();
+
+// 使用Redis进行操作
+redis->set("key", "value");
+std::string value = redis->get("key");
+
+// 释放连接回连接池
+RedisPool::getInstance().release(redis);
 ```
 
 ## 许可证
