@@ -5,7 +5,7 @@
 
 namespace cesium_server {
 
-	// 构造函数
+	// Constructor
 	ZeroMQServer::ZeroMQServer(const std::string& address, unsigned short port, Mode mode, int io_threads)
 		:address_(address),
 		port_(port),
@@ -13,27 +13,27 @@ namespace cesium_server {
 		running_(false),
 		io_threads_(io_threads) {
 
-		// 构建端点字符串
+		// Build endpoint string
 		std::ostringstream endpoint;
 		endpoint << "tcp://" << address << ":" << port;
 		endpoint_ = endpoint.str();
 
-		// 初始化ZeroMQ上下文和套接字
+		// Initialize ZeroMQ context and socket
 		initialize();
 	}
 
-	// 析构函数
+	// Destructor
 	ZeroMQServer::~ZeroMQServer() {
 		stop();
 	}
 
-	// 初始化ZeroMQ上下文和套接字
+	// Initialize ZeroMQ context and socket
 	void ZeroMQServer::initialize() {
 		try {
-			// 创建ZeroMQ上下文
+			// Create ZeroMQ context
 			context_ = std::make_unique<zmq::context_t>(io_threads_);
 
-			// 根据通信模式创建套接字
+			// Create socket based on communication mode
 			switch (mode_) {
 			case Mode::REQ_REP:
 				socket_ = std::make_unique<zmq::socket_t>(*context_, ZMQ_REP);
@@ -48,7 +48,7 @@ namespace cesium_server {
 				break;
 			}
 
-			// 设置套接字选项
+			// Set socket options
 			int linger = 0;
 			socket_->set(zmq::sockopt::linger, linger);
 
@@ -60,7 +60,7 @@ namespace cesium_server {
 		}
 	}
 
-	// 启动服务器
+	// Start server
 	void ZeroMQServer::run() {
 		if (running_) {
 			std::cout << "ZeroMQ server already running" << std::endl;
@@ -68,16 +68,16 @@ namespace cesium_server {
 		}
 
 		try {
-			// 绑定套接字到端点
+			// Bind socket to endpoint
 			socket_->bind(endpoint_);
 
-			// 设置运行标志
+			// Set running flag
 			running_ = true;
 
-			// 初始化线程池
+			// Initialize thread pool
 			thread_pool_ = std::make_unique<ThreadPool>(1);
 
-			// 根据通信模式启动相应的处理任务
+			// Start appropriate handler based on communication mode
 			switch (mode_) {
 			case Mode::REQ_REP:
 				thread_pool_->enqueue(&ZeroMQServer::handleReqRep, this);
@@ -104,25 +104,25 @@ namespace cesium_server {
 		}
 	}
 
-	// 停止服务器
+	// Stop server
 	void ZeroMQServer::stop() {
 		if (!running_) {
 			return;
 		}
 
-		// 设置停止标志
+		// Set stop flag
 		running_ = false;
 
-		// 销毁线程池
+		// Destroy thread pool
 		thread_pool_.reset();
 
 		try {
-			// 关闭套接字
+			// Close socket
 			if (socket_) {
 				socket_->close();
 			}
 
-			// 清空消息队列
+			// Clear message queue
 			std::queue<std::pair<std::string, std::string>> empty;
 			std::swap(message_queue_, empty);
 
@@ -133,7 +133,7 @@ namespace cesium_server {
 		}
 	}
 
-	// 发送消息
+	// Send message
 	bool ZeroMQServer::sendMessage(const std::string& message, const std::string& topic) {
 		if (!running_ || !socket_) {
 			std::cerr << "ZeroMQ server not running" << std::endl;
@@ -141,17 +141,17 @@ namespace cesium_server {
 		}
 
 		try {
-			// 根据通信模式发送消息
+			// Send message based on communication mode
 			switch (mode_) {
 			case Mode::REQ_REP: {
-				// 在REQ-REP模式下，只有收到请求后才能发送响应
+				// In REQ-REP mode, can only send response after receiving request
 				zmq::message_t zmq_message(message.data(), message.size());
 				socket_->send(zmq_message, zmq::send_flags::none);
 				break;
 			}
 
 			case Mode::PUB_SUB: {
-				// 在PUB-SUB模式下，需要先发送主题，再发送消息
+				// In PUB-SUB mode, need to send topic first, then message
 				std::string full_message = topic + " " + message;
 				zmq::message_t zmq_message(full_message.data(), full_message.size());
 				socket_->send(zmq_message, zmq::send_flags::none);
@@ -159,7 +159,7 @@ namespace cesium_server {
 			}
 
 			case Mode::PUSH_PULL: {
-				// 在PUSH-PULL模式下，直接发送消息
+				// In PUSH-PULL mode, send message directly
 				zmq::message_t zmq_message(message.data(), message.size());
 				socket_->send(zmq_message, zmq::send_flags::none);
 				break;
@@ -174,19 +174,19 @@ namespace cesium_server {
 		}
 	}
 
-	// 设置消息处理器
+	// Set message handler
 	void ZeroMQServer::setMessageHandler(ZmqMessageHandler handler) {
 		message_handler_ = std::move(handler);
 	}
 
-	// 请求-响应模式处理
+	// Request-response mode handler
 	void ZeroMQServer::handleReqRep() {
 		while (running_) {
 			try {
-				// 接收请求
+				// Receive request
 				zmq::message_t request;
 
-				// 使用轮询方式接收消息，避免阻塞
+				// Use polling to receive messages, avoid blocking
 				zmq::pollitem_t items[] = {
 					{ socket_->handle(), 0, ZMQ_POLLIN, 0 }
 				};
@@ -197,10 +197,10 @@ namespace cesium_server {
 					auto result = socket_->recv(request, zmq::recv_flags::none);
 
 					if (result) {
-						// 将ZeroMQ消息转换为字符串
+						// Convert ZeroMQ message to string
 						std::string message(static_cast<char*>(request.data()), request.size());
 
-						// 处理消息
+						// Process message
 						processMessage(message, "");
 					}
 				}
@@ -213,27 +213,27 @@ namespace cesium_server {
 		}
 	}
 
-	// 发布-订阅模式处理
+	// Publish-subscribe mode handler
 	void ZeroMQServer::handlePubSub() {
-		// 在PUB-SUB模式下，服务器只发布消息，不接收消息
-		// 因此这里只需要一个简单的循环来保持线程运行
+		// In PUB-SUB mode, server only publishes messages, doesn't receive them
+		// So we just need a simple loop to keep the thread running
 		while (running_) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	}
 
-	// 推送-拉取模式处理
+	// Push-pull mode handler
 	void ZeroMQServer::handlePushPull() {
-		// 在PUSH-PULL模式下，服务器只推送消息，不接收消息
-		// 因此这里只需要一个简单的循环来保持线程运行
+		// In PUSH-PULL mode, server only pushes messages, doesn't receive them
+		// So we just need a simple loop to keep the thread running
 		while (running_) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	}
 
-	// 处理接收到的消息
+	// Process received message
 	void ZeroMQServer::processMessage(const std::string& message, const std::string& topic) {
-		// 如果设置了消息处理器，则调用它
+		// If message handler is set, call it
 		if (message_handler_) {
 			try {
 				message_handler_(message, topic);
@@ -244,4 +244,36 @@ namespace cesium_server {
 		}
 	}
 
+	// Publish test data
+	bool ZeroMQServer::publishTestData(const std::string& test_data_type, const std::string& topic) {
+		if (!running_ || mode_ != Mode::PUB_SUB) {
+			std::cerr << "ZeroMQ server not running or not in PUB-SUB mode, cannot publish test data" << std::endl;
+			return false;
+		}
+		
+		std::string test_message;
+		
+		// 根据测试数据类型生成不同的测试数据
+		if (test_data_type == "position") {
+			// 位置数据测试包
+			test_message = "{\"type\":\"position\",\"data\":{\"id\":2001,\"x\":120.5,\"y\":30.2,\"z\":50.0,\"timestamp\":"+
+				std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"}}"; 
+		} else if (test_data_type == "status") {
+			// 状态数据测试包
+			test_message = "{\"type\":\"status\",\"data\":{\"id\":2001,\"status\":\"active\",\"battery\":85,\"timestamp\":"+
+				std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"}}"; 
+		} else if (test_data_type == "alert") {
+			// 告警数据测试包
+			test_message = "{\"type\":\"alert\",\"data\":{\"id\":2001,\"level\":\"warning\",\"message\":\"System overheating\",\"timestamp\":"+
+				std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"}}"; 
+		} else {
+			// 默认测试包
+			test_message = "{\"type\":\"test\",\"data\":{\"message\":\"This is a ZeroMQ test message\",\"timestamp\":"+
+				std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"}}"; 
+		}
+		
+		// 发布测试数据
+		std::cout << "Publishing ZeroMQ test data to topic '" << topic << "': " << test_message << std::endl;
+		return sendMessage(test_message, topic);
+	}
 } // namespace cesium_server

@@ -66,6 +66,8 @@ private:
 
     // 服务器状态
     bool running_;
+    // 发送错误响应
+    void sendErrorResponse(tcp::socket& socket, http::status status, const std::string& error_message);
 };
 
 } // namespace cesium_server

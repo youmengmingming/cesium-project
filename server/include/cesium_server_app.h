@@ -62,12 +62,12 @@ struct ServerConfig {
     
     // 默认构造函数
     ServerConfig() 
-        : http_address("0.0.0.0"), http_port(3000), http_threads(2),
-          ws_address("0.0.0.0"), ws_port(3001), ws_threads(2),
+        : http_address("127.0.0.1"), http_port(3000), http_threads(2),
+          ws_address("127.0.0.1"), ws_port(3001), ws_threads(2),
           udp_multicast_address("239.255.0.1"), udp_port(5000),
-          udp_listen_address("0.0.0.0"), udp_buffer_size(8192),
-          zmq_address("0.0.0.0"), zmq_port(5555), 
-          zmq_mode(ZeroMQServer::Mode::REQ_REP), zmq_io_threads(1), enable_zmq(true),
+          udp_listen_address("127.0.0.1"), udp_buffer_size(8192),
+          zmq_address("127.0.0.1"), zmq_port(5555), 
+          zmq_mode(ZeroMQServer::Mode::PUB_SUB), zmq_io_threads(1), enable_zmq(true),
           enable_simulation(true), simulation_interval_seconds(5) {}
 };
 

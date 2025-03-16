@@ -52,6 +52,9 @@ public:
 	// 获取接收缓冲区大小
 	size_t getBufferSize() const { return recv_buffer_.size(); }
 
+	// 发送测试数据
+	void sendTestData(const std::string& test_data_type = "default");
+
 private:
 	// 接收消息
 	void doReceive();
@@ -106,4 +109,6 @@ private:
 
 	// 发送中标志
 	std::atomic<bool> sending_;
+
+
 };

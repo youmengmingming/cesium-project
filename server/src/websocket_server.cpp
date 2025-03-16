@@ -216,7 +216,7 @@ void WebSocketSession::onClose(beast::error_code ec) {
 // WebSocket 服务器构造函数
 WebSocketServer::WebSocketServer(const std::string& address, unsigned short port, int threads)
     : address_(address), port_(port), num_threads_(threads),
-      ioc_(1), acceptor_(net::make_strand(ioc_)), running_(false) {
+      ioc_(threads), acceptor_(net::make_strand(ioc_)), running_(false) {
     
     beast::error_code ec;
 
@@ -268,8 +268,10 @@ void WebSocketServer::run() {
     // 初始化线程池
     thread_pool_ = std::make_unique<ThreadPool>(num_threads_);
 
-    // 启动IO上下文
-    thread_pool_->enqueue([this] { ioc_.run(); });
+    // 启动IO上下文在所有线程中
+    for (int i = 0; i < num_threads_; ++i) {
+        thread_pool_->enqueue([this] { ioc_.run(); });
+    }
 
     std::cout << "WebSocket server running with " << num_threads_ << " threads" << std::endl;
 }

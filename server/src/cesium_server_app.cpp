@@ -54,12 +54,12 @@ void CesiumServerApp::initialize() {
         // 初始化日志系统
         Logger::initialize(); 
         
-        spdlog::info("开始初始化Cesium服务器应用程序");
+        spdlog::info("Initializing Cesium server application");
 
         // 创建 HTTP 服务器
         http_server_ = std::make_unique<HttpServer>(
             config_.http_address, config_.http_port, config_.http_threads);
-        spdlog::info("HTTP服务器初始化完成，监听地址: {}:{}", config_.http_address, config_.http_port);
+        spdlog::info("HTTP server initialized, listening on: {}:{}", config_.http_address, config_.http_port);
 
         // 注册 HTTP 路由
         http_server_->registerHandler("/coordinates",
@@ -599,6 +599,42 @@ void CesiumServerApp::simulationThread() {
                 } catch (const std::exception& e) {
                     std::cerr << "Error broadcasting simulation data: " << e.what() << std::endl;
                 }
+            }
+            
+            // 发送UDP组播测试数据
+            try {
+                if (udp_server_ && udp_server_->isRunning()) {
+                    // 轮流发送不同类型的测试数据
+                    static int udp_test_counter = 0;
+                    std::string test_type;
+                    switch (udp_test_counter % 3) {
+                        case 0: test_type = "position"; break;
+                        case 1: test_type = "status"; break;
+                        case 2: test_type = "alert"; break;
+                    }
+                    udp_server_->sendTestData(test_type);
+                    udp_test_counter++;
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "Error sending UDP multicast test data: " << e.what() << std::endl;
+            }
+            
+            // 发送ZeroMQ测试数据
+            try {
+                if (zmq_server_ && zmq_server_->isRunning() && config_.enable_zmq && zmq_server_->getMode() == ZeroMQServer::Mode::PUB_SUB) {
+                    // 轮流发送不同类型的测试数据
+                    static int zmq_test_counter = 0;
+                    std::string test_type;
+                    switch (zmq_test_counter % 3) {
+                        case 0: test_type = "position"; break;
+                        case 1: test_type = "status"; break;
+                        case 2: test_type = "alert"; break;
+                    }
+                    zmq_server_->publishTestData(test_type, "simulation");
+                    zmq_test_counter++;
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "Error publishing ZeroMQ test data: " << e.what() << std::endl;
             }
         } catch (const std::exception& e) {
             std::cerr << "Error in simulation thread: " << e.what() << std::endl;

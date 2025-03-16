@@ -33,10 +33,10 @@ public:
 
             // 设置日志格式
             spdlog::set_pattern("%Y-%m-%d %H:%M:%S.%e [%l] [%t] %v");
-            spdlog::info("日志系统初始化完成");
+            spdlog::info("Log system initialized");
         }
         catch (const spdlog::spdlog_ex& ex) {
-            std::cerr << "日志初始化失败: " << ex.what() << std::endl;
+            std::cerr << "Log initialization failed: " << ex.what() << std::endl;
             throw;
         }
     }

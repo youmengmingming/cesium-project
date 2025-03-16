@@ -5,6 +5,7 @@
 #include <string>
 #include <condition_variable>
 #include <sw/redis++/redis++.h>
+#include <optional>
 
 namespace server {
 namespace database {

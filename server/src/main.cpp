@@ -5,10 +5,10 @@
 #include <thread>
 #include <chrono>
 
-// 全局服务器应用程序指针，用于信号处理
+// Global server application pointer for signal handling
 cesium_server::CesiumServerApp* g_app = nullptr;
 
-// 信号处理函数
+// Signal handler function
 void signalHandler(int signal) {
     std::cout << "Received signal " << signal << std::endl;
     if (g_app) {
@@ -19,10 +19,10 @@ void signalHandler(int signal) {
 
 int main(int argc, char* argv[]) {
     try {
-        // 创建服务器配置
+        // Create server configuration
         cesium_server::ServerConfig config;
         
-        // 解析命令行参数
+        // Parse command line arguments
         for (int i = 1; i < argc; ++i) {
             std::string arg = argv[i];
             if (arg == "--http-address" && i + 1 < argc) {
@@ -67,15 +67,15 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        // 设置信号处理
+        // Set up signal handlers
         std::signal(SIGINT, signalHandler);
         std::signal(SIGTERM, signalHandler);
         
-        // 创建服务器应用程序
+        // Create server application
         cesium_server::CesiumServerApp app(config);
         g_app = &app;
         
-        // 启动服务器
+        // Start the server
         app.run();
         
         std::cout << "Server started. Press Ctrl+C to stop." << std::endl;
@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) {
                                       config.zmq_mode == cesium_server::ZeroMQServer::Mode::PUB_SUB ? "pub-sub" : "push-pull") << ")" << std::endl;
         }
         
-        // 主线程等待，直到收到信号
+        // Main thread waits until signal is received
         while (true) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }

@@ -6,7 +6,7 @@
 #include <thread>
 #include <chrono>
 
-// 构造函数
+// Constructor
 UdpMulticastServer::UdpMulticastServer(const std::string& multicast_address, unsigned short port, const std::string& listen_address, size_t buffer_size)
 	:multicast_endpoint_(net::ip::make_address(multicast_address), port),
 	recv_buffer_(buffer_size),
@@ -17,53 +17,140 @@ UdpMulticastServer::UdpMulticastServer(const std::string& multicast_address, uns
 	last_error_time_(std::chrono::steady_clock::now()),
 	sending_(false) {
 	try {
-		// 创建UDP套接字
-		socket_.open(udp::v4());
-
-		// 设置套接字选项
-		socket_.set_option(udp::socket::reuse_address(true));
+		// 打印初始化信息
+		std::cout << "Initializing UDP Multicast Server..." << std::endl;
+		std::cout << "  Multicast address: " << multicast_address << std::endl;
+		std::cout << "  Listen address: " << listen_address << std::endl;
+		std::cout << "  Port: " << port << std::endl;
+		std::cout << "  Buffer size: " << buffer_size << " bytes" << std::endl;
 		
-		// 设置接收缓冲区大小
-		socket_.set_option(boost::asio::socket_base::receive_buffer_size(buffer_size));
+		// 验证多播地址
+		net::ip::address addr = net::ip::make_address(multicast_address);
+		if (!addr.is_multicast()) {
+			std::cerr << "Error: " << multicast_address << " is not a valid multicast address" << std::endl;
+			std::cerr << "Multicast addresses must be in the range 224.0.0.0 to 239.255.255.255" << std::endl;
+			throw std::invalid_argument("Invalid multicast address");
+		}
 		
-		// 设置发送缓冲区大小
-		socket_.set_option(boost::asio::socket_base::send_buffer_size(buffer_size));
+		// Create UDP socket
+		boost::system::error_code ec;
+		socket_.open(udp::v4(), ec);
+		if (ec) {
+			std::cerr << "Error opening socket: " << ec.message() << std::endl;
+			throw std::runtime_error("Failed to open socket: " + ec.message());
+		}
 
-		// 绑定到指定端口
-		socket_.bind(udp::endpoint(net::ip::make_address(listen_address), port));
-
-		// 加入组播组
-		socket_.set_option(net::ip::multicast::join_group(
-			net::ip::make_address(multicast_address)));
+		// Set socket options
+		socket_.set_option(udp::socket::reuse_address(true), ec);
+		if (ec) {
+			std::cerr << "Error setting reuse_address option: " << ec.message() << std::endl;
+			throw std::runtime_error("Failed to set reuse_address option: " + ec.message());
+		}
 		
-		// 设置组播TTL
-		socket_.set_option(net::ip::multicast::hops(1));
+		// Set receive buffer size
+		socket_.set_option(boost::asio::socket_base::receive_buffer_size(buffer_size), ec);
+		if (ec) {
+			std::cerr << "Warning: Failed to set receive buffer size: " << ec.message() << std::endl;
+			// 非致命错误，继续执行
+		}
+		
+		// Set send buffer size
+		socket_.set_option(boost::asio::socket_base::send_buffer_size(buffer_size), ec);
+		if (ec) {
+			std::cerr << "Warning: Failed to set send buffer size: " << ec.message() << std::endl;
+			// 非致命错误，继续执行
+		}
 
-		std::cout << "UDP Multicast Server initialized on " << listen_address
+		// Bind to specified port
+		try {
+			udp::endpoint bind_endpoint(net::ip::make_address(listen_address), port);
+			std::cout << "Binding to " << bind_endpoint.address().to_string() << ":" << bind_endpoint.port() << std::endl;
+			socket_.bind(bind_endpoint, ec);
+			if (ec) {
+				std::cerr << "Error binding to specific address: " << ec.message() << std::endl;
+				
+				// 尝试使用任意地址绑定
+				std::cout << "Trying to bind to any address (0.0.0.0)..." << std::endl;
+				socket_.bind(udp::endpoint(net::ip::address_v4::any(), port), ec);
+				if (ec) {
+					std::cerr << "Error binding to any address: " << ec.message() << std::endl;
+					throw std::runtime_error("Failed to bind socket: " + ec.message());
+				}
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Exception during binding: " << e.what() << std::endl;
+			throw;
+		}
+
+		// Join multicast group
+		try {
+			// 尝试使用特定网络接口加入多播组
+			if (listen_address != "0.0.0.0") {
+				std::cout << "Joining multicast group using specific interface: " << listen_address << std::endl;
+				net::ip::address listen_addr = net::ip::make_address(listen_address);
+				
+				socket_.set_option(net::ip::multicast::join_group(
+					addr.to_v4(),
+					listen_addr.to_v4()), ec);
+			} else {
+				// 使用默认接口加入多播组
+				std::cout << "Joining multicast group using default interface" << std::endl;
+				socket_.set_option(net::ip::multicast::join_group(addr.to_v4()), ec);
+			}
+			
+			if (ec) {
+				std::cerr << "Error joining multicast group: " << ec.message() << std::endl;
+				throw std::runtime_error("Failed to join multicast group: " + ec.message());
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Exception joining multicast group: " << e.what() << std::endl;
+			throw;
+		}
+		
+		// Set multicast TTL
+		socket_.set_option(net::ip::multicast::hops(1), ec);
+		if (ec) {
+			std::cerr << "Warning: Failed to set multicast TTL: " << ec.message() << std::endl;
+			// 非致命错误，继续执行
+		}
+		
+		// 设置多播回环选项（允许在同一主机上接收自己发送的多播消息）
+		socket_.set_option(net::ip::multicast::enable_loopback(true), ec);
+		if (ec) {
+			std::cerr << "Warning: Failed to set multicast loopback option: " << ec.message() << std::endl;
+			// 非致命错误，继续执行
+		}
+
+		std::cout << "UDP Multicast Server successfully initialized on " << listen_address
 			<< ":" << port << " (group: " << multicast_address << ")" << std::endl;
 	}
 	catch (const std::exception& e) {
 		std::cerr << "UDP Multicast Server initialization error: " << e.what() << std::endl;
+		// 关闭套接字（如果已打开）
+		boost::system::error_code ec;
+		socket_.close(ec);
 		throw;
 	}
 }
 
-// 析构函数
+// Destructor
 UdpMulticastServer::~UdpMulticastServer() {
 	stop();
 }
 
-// 获取组播地址
+// Get multicast address
 std::string UdpMulticastServer::getMulticastAddress() const {
 	return multicast_endpoint_.address().to_string();
 }
 
-// 获取端口
+// Get port
 unsigned short UdpMulticastServer::getPort() const {
 	return multicast_endpoint_.port();
 }
 
-// 启动服务器
+// Start server
 void UdpMulticastServer::run() {
 	if (running_) {
 		return;
@@ -71,17 +158,17 @@ void UdpMulticastServer::run() {
 
 	running_ = true;
 
-	// 创建工作守卫以保持io_context运行
+	// Create work guard to keep io_context running
 	work_guard_ = std::make_unique<net::executor_work_guard<net::io_context::executor_type>>(
 		io_context_.get_executor());
 
-	// 开始接收消息
+	// Start receiving messages
 	doReceive();
 
-	// 初始化线程池
+	// Initialize thread pool
 	thread_pool_ = std::make_unique<ThreadPool>(1);
 
-	// 启动IO上下文
+	// Start IO context
 	thread_pool_->enqueue([this]() {
 		try {
 			io_context_.run();
@@ -94,7 +181,7 @@ void UdpMulticastServer::run() {
 	std::cout << "UDP Multicast Server running" << std::endl;
 }
 
-// 停止服务器
+// Stop server
 void UdpMulticastServer::stop() {
 	if (!running_) {
 		return;
@@ -102,24 +189,24 @@ void UdpMulticastServer::stop() {
 
 	running_ = false;
 
-	// 移除工作守卫以允许io_context退出
+	// Remove work guard to allow io_context to exit
 	work_guard_.reset();
 
-	// 关闭套接字
+	// Close socket
 	boost::system::error_code ec;
 	socket_.close(ec);
 	if (ec) {
 		std::cerr << "Error closing socket: " << ec.message() << std::endl;
 	}
 
-	// 销毁线程池
+	// Destroy thread pool
 	thread_pool_.reset();
 
-	// 重置io_context
+	// Reset io_context
 	io_context_.stop();
 	io_context_.restart();
 	
-	// 清空发送队列
+	// Clear send queue
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
 		std::queue<std::string> empty;
@@ -129,69 +216,103 @@ void UdpMulticastServer::stop() {
 	std::cout << "UDP Multicast Server stopped" << std::endl;
 }
 
-// 发送组播消息
+// Send multicast message
+// Send multicast message
 void UdpMulticastServer::sendMessage(const std::string& message) {
 	if (!running_) {
 		return;
 	}
 
-	// 将消息添加到发送队列
+	// Add message to send queue
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
 		send_queue_.push(message);
 	}
 	
-	// 如果没有发送操作正在进行，启动一个
+	// If no send operation is in progress, start one
 	if (!sending_.exchange(true)) {
-		// 使用strand确保线程安全
+		// Use strand to ensure thread safety
 		net::dispatch(net::make_strand(io_context_), [this]() {
 			try {
-				// 处理发送队列中的下一条消息
-				std::string next_message;
+				// Process next message in the send queue
+				std::shared_ptr<std::string> next_message = std::make_shared<std::string>();
 				{
 					std::lock_guard<std::mutex> lock(mutex_);
 					if (send_queue_.empty()) {
 						sending_ = false;
 						return;
 					}
-					next_message = std::move(send_queue_.front());
+					*next_message = std::move(send_queue_.front());
 					send_queue_.pop();
 				}
 				
-				// 发送消息
-				socket_.async_send_to(
-					net::buffer(next_message),
-					multicast_endpoint_,
-					[this](boost::system::error_code ec, std::size_t /*bytes_sent*/) {
-						if (ec) {
-							std::cerr << "UDP Multicast send error: " << ec.message() << std::endl;
-						}
+				// 打印发送信息
+				std::cout << "Sending to " << multicast_endpoint_.address().to_string() 
+					<< ":" << multicast_endpoint_.port() << ", message size: " 
+					<< next_message->size() << " bytes" << std::endl;
+				
+				// 检查多播地址是否有效
+				if (!multicast_endpoint_.address().is_multicast()) {
+					std::cerr << "Error: " << multicast_endpoint_.address().to_string() 
+						<< " is not a valid multicast address" << std::endl;
+					sending_ = false;
+					return;
+				}
+				
+				// Send message
+				boost::system::error_code ec;
+				
+				// 尝试同步发送以获取立即的错误反馈
+				size_t bytes_sent = socket_.send_to(net::buffer(*next_message), multicast_endpoint_, 0, ec);
+				if (ec) {
+					std::cerr << "UDP Multicast send error (sync): " << ec.value() << " - " << ec.message() << std::endl;
+					
+					// 检查是否是网络不可达错误
+					if (ec == boost::asio::error::network_unreachable || 
+						ec == boost::asio::error::host_unreachable || 
+						ec == boost::asio::error::network_down) {
+						std::cerr << "Network location not found. Please check your network connection and multicast configuration." << std::endl;
 						
-						// 继续处理队列中的下一条消息
-						sending_ = false;
-						if (running_) {
-							sendMessage(""); // 触发处理队列中的下一条消息
+						// 尝试重新加入多播组
+						std::cout << "Attempting to rejoin multicast group..." << std::endl;
+						if (rejoinMulticastGroup()) {
+							// 重试发送
+							bytes_sent = socket_.send_to(net::buffer(*next_message), multicast_endpoint_, 0, ec);
+							if (ec) {
+								std::cerr << "UDP Multicast send error after rejoin: " << ec.message() << std::endl;
+							} else {
+								std::cout << "Successfully sent message after rejoin: " << bytes_sent << " bytes" << std::endl;
+							}
 						}
-					});
+					}
+				} else {
+					std::cout << "Successfully sent message: " << bytes_sent << " bytes" << std::endl;
+				}
+				
+				// 继续处理队列中的下一条消息
+				sending_ = false;
+				if (running_ && !send_queue_.empty()) {
+					sendMessage(""); // 触发处理队列中的下一条消息
+				}
 			}
 			catch (const std::exception& e) {
-				std::cerr << "UDP Multicast send error: " << e.what() << std::endl;
+				std::cerr << "UDP Multicast send exception: " << e.what() << std::endl;
 				sending_ = false;
 			}
 		});
 	}
 }
 
-// 设置消息处理器
+// Set message handler
 void UdpMulticastServer::setMessageHandler(UdpMessageHandler handler) {
 	std::lock_guard<std::mutex> lock(mutex_);
 	message_handler_ = std::move(handler);
 }
 
-// 重新连接组播组
+// Rejoin multicast group
 bool UdpMulticastServer::rejoinMulticastGroup() {
 	try {
-		// 关闭并重新打开套接字
+		// Close and reopen socket
 		boost::system::error_code ec;
 		socket_.close(ec);
 		if (ec) {
@@ -199,17 +320,103 @@ bool UdpMulticastServer::rejoinMulticastGroup() {
 			return false;
 		}
 		
-		// 重新打开套接字
-		socket_.open(udp::v4());
-		socket_.set_option(udp::socket::reuse_address(true));
-		socket_.set_option(boost::asio::socket_base::receive_buffer_size(recv_buffer_.size()));
-		socket_.set_option(boost::asio::socket_base::send_buffer_size(recv_buffer_.size()));
-		socket_.bind(udp::endpoint(net::ip::make_address(listen_address_), multicast_endpoint_.port()));
+		// 打印网络接口信息
+		std::cout << "Network interface information:" << std::endl;
+		std::cout << "  Listen address: " << listen_address_ << std::endl;
+		std::cout << "  Multicast address: " << multicast_endpoint_.address().to_string() << std::endl;
+		std::cout << "  Port: " << multicast_endpoint_.port() << std::endl;
 		
-		// 重新加入组播组
-		socket_.set_option(net::ip::multicast::join_group(
-			multicast_endpoint_.address().to_v4()));
-		socket_.set_option(net::ip::multicast::hops(1));
+		// Reopen socket
+		socket_.open(udp::v4(), ec);
+		if (ec) {
+			std::cerr << "Error opening socket: " << ec.message() << std::endl;
+			return false;
+		}
+		
+		// Set socket options
+		socket_.set_option(udp::socket::reuse_address(true), ec);
+		if (ec) {
+			std::cerr << "Error setting reuse_address option: " << ec.message() << std::endl;
+			return false;
+		}
+		
+		// Set receive buffer size
+		socket_.set_option(boost::asio::socket_base::receive_buffer_size(recv_buffer_.size()), ec);
+		if (ec) {
+			std::cerr << "Error setting receive buffer size: " << ec.message() << std::endl;
+			return false;
+		}
+		
+		// Set send buffer size
+		socket_.set_option(boost::asio::socket_base::send_buffer_size(recv_buffer_.size()), ec);
+		if (ec) {
+			std::cerr << "Error setting send buffer size: " << ec.message() << std::endl;
+			return false;
+		}
+		
+		// Bind to specified port
+		try {
+			udp::endpoint bind_endpoint(net::ip::make_address(listen_address_), multicast_endpoint_.port());
+			std::cout << "Binding to " << bind_endpoint.address().to_string() << ":" << bind_endpoint.port() << std::endl;
+			socket_.bind(bind_endpoint, ec);
+			if (ec) {
+				std::cerr << "Error binding socket: " << ec.message() << std::endl;
+				
+				// 尝试使用任意地址绑定
+				std::cout << "Trying to bind to any address (0.0.0.0)..." << std::endl;
+				socket_.bind(udp::endpoint(net::ip::address_v4::any(), multicast_endpoint_.port()), ec);
+				if (ec) {
+					std::cerr << "Error binding to any address: " << ec.message() << std::endl;
+					return false;
+				}
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Exception during binding: " << e.what() << std::endl;
+			return false;
+		}
+		
+		// Join multicast group
+		try {
+			// 尝试使用特定网络接口加入多播组
+			if (listen_address_ != "0.0.0.0") {
+				std::cout << "Joining multicast group using specific interface: " << listen_address_ << std::endl;
+				net::ip::address listen_addr = net::ip::make_address(listen_address_);
+				net::ip::address multicast_addr = multicast_endpoint_.address();
+				
+				socket_.set_option(net::ip::multicast::join_group(
+					multicast_addr.to_v4(),
+					listen_addr.to_v4()), ec);
+			} else {
+				// 使用默认接口加入多播组
+				std::cout << "Joining multicast group using default interface" << std::endl;
+				socket_.set_option(net::ip::multicast::join_group(
+					multicast_endpoint_.address().to_v4()), ec);
+			}
+			
+			if (ec) {
+				std::cerr << "Error joining multicast group: " << ec.message() << std::endl;
+				return false;
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Exception joining multicast group: " << e.what() << std::endl;
+			return false;
+		}
+		
+		// Set multicast TTL
+		socket_.set_option(net::ip::multicast::hops(1), ec);
+		if (ec) {
+			std::cerr << "Error setting multicast TTL: " << ec.message() << std::endl;
+			return false;
+		}
+		
+		// 设置多播回环选项（允许在同一主机上接收自己发送的多播消息）
+		socket_.set_option(net::ip::multicast::enable_loopback(true), ec);
+		if (ec) {
+			std::cerr << "Error setting multicast loopback option: " << ec.message() << std::endl;
+			// 这不是致命错误，可以继续
+		}
 		
 		std::cout << "Successfully rejoined multicast group" << std::endl;
 		return true;
@@ -220,7 +427,7 @@ bool UdpMulticastServer::rejoinMulticastGroup() {
 	}
 }
 
-// 接收消息
+// Receive messages
 void UdpMulticastServer::doReceive() {
 	if (!running_) {
 		return;
@@ -230,23 +437,23 @@ void UdpMulticastServer::doReceive() {
 		net::buffer(recv_buffer_), sender_endpoint_,
 		[this](boost::system::error_code ec, std::size_t bytes_transferred) {
 			if (!ec && bytes_transferred > 0) {
-				// 处理接收到的消息
-				std::string message(recv_buffer_.data(), bytes_transferred);
-				handleMessage(message, sender_endpoint_);
+				// Process received message
+				std::shared_ptr<std::string> message = std::make_shared<std::string>(recv_buffer_.data(), bytes_transferred);
+				handleMessage(*message, sender_endpoint_);
 
-				// 重置错误计数器
+				// Reset error counter
 				error_count_ = 0;
 			}
 			else if (ec) {
 				if (ec != boost::asio::error::operation_aborted) {
 					std::cerr << "UDP Multicast receive error: " << ec.message() << std::endl;
 
-					// 增加错误计数并检查是否需要重新连接
+					// Increment error count and check if reconnection is needed
 					auto now = std::chrono::steady_clock::now();
 					auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
 						now - last_error_time_).count();
 					
-					// 如果错误频繁发生，尝试重新连接
+					// If errors occur frequently, try to reconnect
 					if (++error_count_ > 3 && elapsed < 60) {
 						std::cout << "Too many errors, attempting to rejoin multicast group..." << std::endl;
 						if (rejoinMulticastGroup()) {
@@ -258,14 +465,14 @@ void UdpMulticastServer::doReceive() {
 				}
 			}
 
-			// 继续接收下一条消息
+			// Continue receiving next message
 			if (running_) {
 				doReceive();
 			}
 		});
 }
 
-// 处理接收到的消息
+// Handle received message
 void UdpMulticastServer::handleMessage(const std::string& message, const boost::asio::ip::udp::endpoint& sender) {
 	std::lock_guard<std::mutex> lock(mutex_);
 	if (message_handler_) {
@@ -276,4 +483,37 @@ void UdpMulticastServer::handleMessage(const std::string& message, const boost::
 			std::cerr << "UDP Message handler error: " << e.what() << std::endl;
 		}
 	}
+}
+
+// Send test data
+void UdpMulticastServer::sendTestData(const std::string& test_data_type) {
+	if (!running_) {
+		std::cerr << "UDP Multicast Server not running, cannot send test data" << std::endl;
+		return;
+	}
+	
+	std::string test_message;
+	
+	// 根据测试数据类型生成不同的测试数据
+	if (test_data_type == "position") {
+		// 位置数据测试包
+		test_message = "{\"type\":\"position\",\"data\":{\"id\":1001,\"x\":120.5,\"y\":30.2,\"z\":50.0,\"timestamp\":"+
+			std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"}}"; 
+	} else if (test_data_type == "status") {
+		// 状态数据测试包
+		test_message = "{\"type\":\"status\",\"data\":{\"id\":1001,\"status\":\"active\",\"battery\":85,\"timestamp\":"+
+			std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"}}"; 
+	} else if (test_data_type == "alert") {
+		// 告警数据测试包
+		test_message = "{\"type\":\"alert\",\"data\":{\"id\":1001,\"level\":\"warning\",\"message\":\"Low battery\",\"timestamp\":"+
+			std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"}}"; 
+	} else {
+		// 默认测试包
+		test_message = "{\"type\":\"test\",\"data\":{\"message\":\"This is a test message\",\"timestamp\":"+
+			std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"}}"; 
+	}
+	
+	// 发送测试数据
+	std::cout << "Sending UDP multicast test data: " << test_message << std::endl;
+	sendMessage(test_message);
 }

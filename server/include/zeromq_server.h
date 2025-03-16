@@ -58,6 +58,9 @@ namespace cesium_server {
 		// 获取模式
 		Mode getMode() const { return mode_; }
 
+		// 发布测试数据
+		bool publishTestData(const std::string& test_data_type = "default", const std::string& topic = "test");
+
 	private:
 		// 初始化ZeroMQ上下文和套接字
 		void initialize();
