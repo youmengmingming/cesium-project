@@ -9,13 +9,23 @@
           <i class="fas fa-chart-line"></i>
           测试1
         </button>
-        <button v-for="i in 3" :key="i+1" class="menu-button">
+        <button @click="handleTest2Click" class="menu-button">
+          <i class="fas fa-satellite"></i>
+          测试2
+        </button>
+        <button v-for="i in 2" :key="i+2" class="menu-button">
           <i class="fas fa-layer-group"></i>
-          测试{{ i+1 }}
+          测试{{ i+2 }}
         </button>
       </div>
     </div>
     <div class="right-section">
+      <Entity
+        ref="entityComponent"
+        :websocket-url="'ws://localhost:3001'"
+        :show-controls="true"
+        class="entity-panel"
+      />
       <div class="date-time">
         <div class="date">{{ currentDate }}</div>
         <div class="time">{{ currentTime }}</div>
@@ -26,6 +36,8 @@
 
 <script lang="ts">
 import { defineComponent, ref, onMounted, onUnmounted } from 'vue'
+import Entity from './Entity.vue'
+import { WebSocketService } from '../utils/websocket'
 
 interface Coordinates {
   longitude: number;
@@ -34,6 +46,9 @@ interface Coordinates {
 
 export default defineComponent({
   name: 'MenuBar',
+  components: {
+    Entity
+  },
   setup() {
     const currentTime = ref('')
     const currentDate = ref('')
@@ -106,12 +121,28 @@ export default defineComponent({
       currentCoords.value = { longitude, latitude };
     };
 
+    // 添加对Entity组件的引用
+    const entityComponent = ref(null);
+    
+    // 测试2按钮点击处理函数
+    const handleTest2Click = () => {
+      if (entityComponent.value) {
+        // 调用Entity组件的connect方法连接WebSocket服务器
+        entityComponent.value.connect();
+        console.log('已触发WebSocket连接');
+      } else {
+        console.error('Entity组件未找到');
+      }
+    };
+    
     return {
       currentTime,
       currentDate,
       handleTest1Click,
+      handleTest2Click,
       currentCoords,
-      updateCoordinates
+      updateCoordinates,
+      entityComponent
     }
   }
 })

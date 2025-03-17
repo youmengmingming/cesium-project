@@ -9,8 +9,10 @@
   "dependencies": {
     "ant-design-vue": "^4.2.6",
     "cesium": "^1.85.0",
+    "lodash": "^4.17.21",
     "vue": "^3.2.6",
-    "vuex": "^4.1.0"
+    "vuex": "^4.1.0",
+    "ws": "^8.18.1"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^1.6.1",
